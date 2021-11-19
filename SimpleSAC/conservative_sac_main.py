@@ -14,7 +14,7 @@ import absl.app
 import absl.flags
 
 from .conservative_sac import ConservativeSAC
-from .replay_buffer import batch_to_torch, get_d4rl_dataset, subsample_batch
+from .replay_buffer import batch_to_torch, get_d4rl_dataset, subsample_batch, load_dataset
 from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
 from .sampler import StepSampler, TrajSampler
 from .utils import Timer, define_flags_with_default, set_random_seed, print_flags, get_user_flags, prefix_metrics
@@ -64,8 +64,8 @@ def main(argv):
 
     set_random_seed(FLAGS.seed)
 
-    eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)
-    dataset = get_d4rl_dataset(eval_sampler.env)
+    eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
+    dataset = load_dataset('/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/medium_buffer/data0.h5py') # TODO
     dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
 
     policy = TanhGaussianPolicy(
@@ -119,9 +119,9 @@ def main(argv):
 
                 metrics['average_return'] = np.mean([np.sum(t['rewards']) for t in trajs])
                 metrics['average_traj_length'] = np.mean([len(t['rewards']) for t in trajs])
-                metrics['average_normalizd_return'] = np.mean(
-                    [eval_sampler.env.get_normalized_score(np.sum(t['rewards'])) for t in trajs]
-                )
+                # metrics['average_normalizd_return'] = np.mean(
+                #     [eval_sampler.env.get_normalized_score(np.sum(t['rewards'])) for t in trajs]
+                # ) # TODO
                 if FLAGS.save_model:
                     save_data = {'sac': sac, 'variant': variant, 'epoch': epoch}
                     wandb_logger.save_pickle(save_data, 'model.pkl')

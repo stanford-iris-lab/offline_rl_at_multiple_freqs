@@ -30,7 +30,7 @@ All available command options can be seen in SimpleSAC/conservative\_sac_main.py
 You can run CQL experiments using the following command:
 ```
 python -m SimpleSAC.conservative_sac_main \
-    --env 'halfcheetah-medium-v0' \
+    --env 'BipedalWalker-v3' \
     --logging.output_dir './experiment_output' \
     --device='cuda'
 ```

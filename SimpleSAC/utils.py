@@ -90,7 +90,8 @@ class WandBLogger(object):
                 start_method="thread",
                 _disable_stats=True,
             ),
-            mode='online' if self.config.online else 'offline',
+            mode='online'
+            # mode='online' if self.config.online else 'offline',
         )
 
     def log(self, *args, **kwargs):
