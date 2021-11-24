@@ -34,6 +34,7 @@ class ConservativeSAC(object):
         config.cql_target_action_gap = 1.0
         config.cql_temp = 1.0
         config.cql_min_q_weight = 5.0
+        config.buffer_file = './data0.h5py'
 
         if updates is not None:
             config.update(ConfigDict(updates).copy_and_resolve_references())

@@ -20,6 +20,7 @@ from .sampler import StepSampler, TrajSampler
 from .utils import Timer, define_flags_with_default, set_random_seed, print_flags, get_user_flags, prefix_metrics
 from .utils import WandBLogger
 from viskit.logging import logger, setup_logger
+from dau.code.envs.biped import Walker
 
 
 FLAGS_DEF = define_flags_with_default(
@@ -64,7 +65,11 @@ def main(argv):
 
     set_random_seed(FLAGS.seed)
 
-    eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
+    if "walker_" in FLAGS.env:
+        dt = float(FLAGS.env.split('_')[1])
+        eval_sampler = TrajSampler(Walker(dt), FLAGS.max_traj_length) # TODO
+    else:
+        eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
     dataset = load_dataset('/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/medium_buffer/data0.h5py') # TODO
     dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
 
