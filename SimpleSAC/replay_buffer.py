@@ -3,7 +3,7 @@ import h5py
 from queue import Queue
 import threading
 
-import d4rl
+# import d4rl
 
 import numpy as np
 import torch
@@ -103,15 +103,15 @@ def batch_to_torch(batch, device):
     }
 
 
-def get_d4rl_dataset(env):
-    dataset = d4rl.qlearning_dataset(env, dataset='halfcheetah-medium-v0')
-    return dict(
-        observations=dataset['observations'],
-        actions=dataset['actions'],
-        next_observations=dataset['next_observations'],
-        rewards=dataset['rewards'],
-        dones=dataset['terminals'].astype(np.float32),
-    )
+# def get_d4rl_dataset(env):
+#     dataset = d4rl.qlearning_dataset(env, dataset='halfcheetah-medium-v0')
+#     return dict(
+#         observations=dataset['observations'],
+#         actions=dataset['actions'],
+#         next_observations=dataset['next_observations'],
+#         rewards=dataset['rewards'],
+#         dones=dataset['terminals'].astype(np.float32),
+#     )
 
 def load_dataset(h5path):
     dataset_file = h5py.File(h5path, "r")

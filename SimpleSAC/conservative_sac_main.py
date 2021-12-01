@@ -8,13 +8,13 @@ import pprint
 
 import gym
 import torch
-import d4rl
+# import d4rl
 
 import absl.app
 import absl.flags
 
 from .conservative_sac import ConservativeSAC
-from .replay_buffer import batch_to_torch, get_d4rl_dataset, subsample_batch, load_dataset
+from .replay_buffer import batch_to_torch, subsample_batch, load_dataset
 from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
 from .sampler import StepSampler, TrajSampler
 from .utils import Timer, define_flags_with_default, set_random_seed, print_flags, get_user_flags, prefix_metrics
@@ -70,7 +70,7 @@ def main(argv):
         eval_sampler = TrajSampler(Walker(dt), FLAGS.max_traj_length) # TODO
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
-    dataset = load_dataset('/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/medium_buffer/data0.h5py') # TODO
+    dataset = load_dataset(FLAGS.cql.buffer_file) # TODO
     dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
 
     policy = TanhGaussianPolicy(
