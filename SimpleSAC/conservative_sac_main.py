@@ -25,7 +25,7 @@ from dau.code.envs.biped import Walker
 
 FLAGS_DEF = define_flags_with_default(
     env='halfcheetah-medium-v2',
-    max_traj_length=1000,
+    max_traj_length=100,
     seed=42,
     device='cpu',
     save_model=False,
@@ -66,16 +66,39 @@ def main(argv):
     set_random_seed(FLAGS.seed)
 
     if "walker_" in FLAGS.env:
-        dt = float(FLAGS.env.split('_')[1])
-        eval_sampler = TrajSampler(Walker(dt), FLAGS.max_traj_length) # TODO
-    else:
-        eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
-    dataset = load_dataset(FLAGS.cql.buffer_file) # TODO
-    dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
+        eval_samplers = {}
+        eval_samplers[.1] = TrajSampler(Walker(.1), int(100 * (1/.1)))
+        eval_samplers[.01] = TrajSampler(Walker(.01), int(100 * (1/.01)))
+
+        datasets = {}
+        dataset_01 = load_dataset("/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/medium_buffer_.01/data0.h5py")
+        dataset_01['rewards'] = dataset_01['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
+        datasets[.01] = dataset_01
+        dataset_1 = load_dataset("/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/medium_buffer_.1/data0.h5py")
+        dataset_1['rewards'] = dataset_1['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
+        datasets[.1] = dataset_1
+
+    # if "walker_" in FLAGS.env:
+    #     import pdb; pdb.set_trace()
+    #     dts = [float(x) for x in FLAGS.env.split('_')[1:]]
+    #     eval_samplers = {}
+    #     datasets = {}
+    #     for dt in dts:
+    #         max_traj_length = (1 / dt) * FLAGS.max_traj_length
+    #         eval_samplers[dt] = TrajSampler(Walker(dt), max_traj_length)
+    #         dataset = load_dataset(FLAGS.cql.buffer_file.format(dt))
+    #         dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
+    #         datasets[dt] = dataset
+    # else:
+    #     raise Exception("Environment is not supported. Try walker_{dt}.")
+    # else:
+    #     eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
+    # dataset = load_dataset(FLAGS.cql.buffer_file) # TODO
+    # dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
 
     policy = TanhGaussianPolicy(
-        eval_sampler.env.observation_space.shape[0],
-        eval_sampler.env.action_space.shape[0],
+        eval_samplers[.1].env.observation_space.shape[0],
+        eval_samplers[.1].env.action_space.shape[0],
         arch=FLAGS.policy_arch,
         log_std_multiplier=FLAGS.policy_log_std_multiplier,
         log_std_offset=FLAGS.policy_log_std_offset,
@@ -83,23 +106,23 @@ def main(argv):
     )
 
     qf1 = FullyConnectedQFunction(
-        eval_sampler.env.observation_space.shape[0],
-        eval_sampler.env.action_space.shape[0],
+        eval_samplers[.1].env.observation_space.shape[0],
+        eval_samplers[.1].env.action_space.shape[0],
         arch=FLAGS.qf_arch,
         orthogonal_init=FLAGS.orthogonal_init,
     )
     target_qf1 = deepcopy(qf1)
 
     qf2 = FullyConnectedQFunction(
-        eval_sampler.env.observation_space.shape[0],
-        eval_sampler.env.action_space.shape[0],
+        eval_samplers[.1].env.observation_space.shape[0],
+        eval_samplers[.1].env.action_space.shape[0],
         arch=FLAGS.qf_arch,
         orthogonal_init=FLAGS.orthogonal_init,
     )
     target_qf2 = deepcopy(qf2)
 
     if FLAGS.cql.target_entropy >= 0.0:
-        FLAGS.cql.target_entropy = -np.prod(eval_sampler.env.action_space.shape).item()
+        FLAGS.cql.target_entropy = -np.prod(eval_samplers[.1].env.action_space.shape).item()
 
     sac = ConservativeSAC(FLAGS.cql, policy, qf1, qf2, target_qf1, target_qf2)
     sac.torch_to_device(FLAGS.device)
@@ -112,24 +135,30 @@ def main(argv):
 
         with Timer() as train_timer:
             for batch_idx in range(FLAGS.n_train_step_per_epoch):
-                batch = subsample_batch(dataset, FLAGS.batch_size)
+                per_dataset_batch_size = int(FLAGS.batch_size / 2)
+                batch1 = subsample_batch(datasets[.1], per_dataset_batch_size)
+                batch01 = subsample_batch(datasets[.01], per_dataset_batch_size)
+                batch = {}
+                for k in batch1.keys():
+                    batch[k] = np.concatenate((batch1[k], batch01[k]), axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
                 metrics.update(prefix_metrics(sac.train(batch), 'sac'))
 
         with Timer() as eval_timer:
-            if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
-                trajs = eval_sampler.sample(
-                    sampler_policy, FLAGS.eval_n_trajs, deterministic=True
-                )
+            for dt, eval_sampler in eval_samplers.items():
+                if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
+                    trajs = eval_sampler.sample(
+                        sampler_policy, FLAGS.eval_n_trajs, deterministic=True
+                    )
 
-                metrics['average_return'] = np.mean([np.sum(t['rewards']) for t in trajs])
-                metrics['average_traj_length'] = np.mean([len(t['rewards']) for t in trajs])
-                # metrics['average_normalizd_return'] = np.mean(
-                #     [eval_sampler.env.get_normalized_score(np.sum(t['rewards'])) for t in trajs]
-                # ) # TODO
-                if FLAGS.save_model:
-                    save_data = {'sac': sac, 'variant': variant, 'epoch': epoch}
-                    wandb_logger.save_pickle(save_data, 'model.pkl')
+                    metrics[f'average_return_{dt}'] = np.mean([np.sum(t['rewards']) for t in trajs])
+                    metrics[f'average_traj_length_{dt}'] = np.mean([len(t['rewards']) for t in trajs])
+                    # metrics['average_normalizd_return'] = np.mean(
+                    #     [eval_sampler.env.get_normalized_score(np.sum(t['rewards'])) for t in trajs]
+                    # ) # TODO
+                    if FLAGS.save_model:
+                        save_data = {'sac': sac, 'variant': variant, 'epoch': epoch}
+                        wandb_logger.save_pickle(save_data, 'model.pkl')
 
         metrics['train_time'] = train_timer()
         metrics['eval_time'] = eval_timer()
