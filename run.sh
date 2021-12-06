@@ -20,11 +20,9 @@ python -m SimpleSAC.conservative_sac_main \
   --cql.cql_min_q_weight ${1} \
   --cql.policy_lr ${2} \
   --cql.qf_lr ${3} \
-  --cql.buffer_file "/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/medium_buffer_4_${4}/data0.h5py" \
-  --cql.alpha_multiplier ${5} \
-  --cql.discount 0.99999 \
-  --device='cuda'
+  --cql.buffer_file "/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/medium_buffer_${4}/data0.h5py" \
+  --device 'cuda' \
+  --save_model True
 
-  #--cql.qf_lr ${3} \
-  # --cql.policy_lr ${2} \
-  # --env 'BipedalWalker-v3' \
+# 0.01: 5 1e-4 3e-4 .01
+# 0.1: 1 1e-4 3e-4 .1

@@ -40,10 +40,11 @@ FLAGS_DEF = define_flags_with_default(
     policy_log_std_multiplier=1.0,
     policy_log_std_offset=-1.0,
 
-    n_epochs=2000,
+    n_epochs=400,
     n_train_step_per_epoch=1000,
     eval_period=10,
     eval_n_trajs=5,
+    load_model='',
 
     cql=ConservativeSAC.get_default_config(),
     logging=WandBLogger.get_default_config(),
@@ -73,35 +74,39 @@ def main(argv):
     dataset = load_dataset(FLAGS.cql.buffer_file) # TODO
     dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
 
-    policy = TanhGaussianPolicy(
-        eval_sampler.env.observation_space.shape[0],
-        eval_sampler.env.action_space.shape[0],
-        arch=FLAGS.policy_arch,
-        log_std_multiplier=FLAGS.policy_log_std_multiplier,
-        log_std_offset=FLAGS.policy_log_std_offset,
-        orthogonal_init=FLAGS.orthogonal_init,
-    )
+    if FLAGS.load_model:
+        sac = wandb_logger.load_pickle(FLAGS.load_model)['sac']
+        policy = sac.policy
+    else:
+        policy = TanhGaussianPolicy(
+            eval_sampler.env.observation_space.shape[0],
+            eval_sampler.env.action_space.shape[0],
+            arch=FLAGS.policy_arch,
+            log_std_multiplier=FLAGS.policy_log_std_multiplier,
+            log_std_offset=FLAGS.policy_log_std_offset,
+            orthogonal_init=FLAGS.orthogonal_init,
+        )
 
-    qf1 = FullyConnectedQFunction(
-        eval_sampler.env.observation_space.shape[0],
-        eval_sampler.env.action_space.shape[0],
-        arch=FLAGS.qf_arch,
-        orthogonal_init=FLAGS.orthogonal_init,
-    )
-    target_qf1 = deepcopy(qf1)
+        qf1 = FullyConnectedQFunction(
+            eval_sampler.env.observation_space.shape[0],
+            eval_sampler.env.action_space.shape[0],
+            arch=FLAGS.qf_arch,
+            orthogonal_init=FLAGS.orthogonal_init,
+        )
+        target_qf1 = deepcopy(qf1)
 
-    qf2 = FullyConnectedQFunction(
-        eval_sampler.env.observation_space.shape[0],
-        eval_sampler.env.action_space.shape[0],
-        arch=FLAGS.qf_arch,
-        orthogonal_init=FLAGS.orthogonal_init,
-    )
-    target_qf2 = deepcopy(qf2)
+        qf2 = FullyConnectedQFunction(
+            eval_sampler.env.observation_space.shape[0],
+            eval_sampler.env.action_space.shape[0],
+            arch=FLAGS.qf_arch,
+            orthogonal_init=FLAGS.orthogonal_init,
+        )
+        target_qf2 = deepcopy(qf2)
 
-    if FLAGS.cql.target_entropy >= 0.0:
-        FLAGS.cql.target_entropy = -np.prod(eval_sampler.env.action_space.shape).item()
+        if FLAGS.cql.target_entropy >= 0.0:
+            FLAGS.cql.target_entropy = -np.prod(eval_sampler.env.action_space.shape).item()
 
-    sac = ConservativeSAC(FLAGS.cql, policy, qf1, qf2, target_qf1, target_qf2)
+        sac = ConservativeSAC(FLAGS.cql, policy, qf1, qf2, target_qf1, target_qf2)
     sac.torch_to_device(FLAGS.device)
 
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
@@ -124,7 +129,7 @@ def main(argv):
 
                 metrics['average_return'] = np.mean([np.sum(t['rewards']) for t in trajs])
                 metrics['average_traj_length'] = np.mean([len(t['rewards']) for t in trajs])
-                # metrics['average_normalizd_return'] = np.mean(
+                # metrics['average_normalized_return'] = np.mean(
                 #     [eval_sampler.env.get_normalized_score(np.sum(t['rewards'])) for t in trajs]
                 # ) # TODO
                 if FLAGS.save_model:
