@@ -21,9 +21,8 @@ python -m SimpleSAC.conservative_sac_main \
   --cql.policy_lr ${2} \
   --cql.qf_lr ${3} \
   --cql.buffer_file ".1_and_.01" \
-  --device='cuda'
+  --device 'cuda' \
+  --save_model True
 
-  # --logging.output_dir "./experiments/${4}/" \
-  #--cql.qf_lr ${3} \
-  # --cql.policy_lr ${2} \
-  # --env 'BipedalWalker-v3' \
+# 0.01: 5 1e-4 3e-4 .01
+# 0.1: 1 1e-4 3e-4 .1
