@@ -54,6 +54,13 @@ class WandBLogger(object):
         if updates is not None:
             config.update(ConfigDict(updates).copy_and_resolve_references())
         return config
+    
+    @staticmethod
+    def plot(y_values):
+        x_values = np.arange(0, len(y_values)/10, .1)
+        data = [[x, y] for (x, y) in zip(x_values, y_values)]
+        table = wandb.Table(data=data, columns = ["x", "y"])
+        return wandb.plot.line(table, "x", "y")
 
     def __init__(self, config, variant):
         self.config = self.get_default_config(config)

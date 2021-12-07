@@ -20,9 +20,12 @@ python -m SimpleSAC.conservative_sac_main \
   --cql.cql_min_q_weight ${1} \
   --cql.policy_lr ${2} \
   --cql.qf_lr ${3} \
+  --cql.discount ${5} \
   --cql.buffer_file "/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/medium_buffer_${4}/data0.h5py" \
+  --max_traj_length 10000 \
   --device 'cuda' \
   --save_model True
 
-# 0.01: 5 1e-4 3e-4 .01
-# 0.1: 1 1e-4 3e-4 .1
+# 0.001: 5 1e-4 3e-4 .001 .9999
+# 0.01: 5 1e-4 3e-4 .01 .999
+# 0.1: 1 1e-4 3e-4 .1 .99

@@ -59,7 +59,7 @@ class TrajSampler(object):
         self.max_traj_length = max_traj_length
         self._env = env
 
-    def sample(self, policy, n_trajs, deterministic=False, replay_buffer=None):
+    def sample(self, policy, n_trajs, deterministic=False, replay_buffer=None, video=False):
         trajs = []
         for _ in range(n_trajs):
             observations = []
@@ -67,19 +67,39 @@ class TrajSampler(object):
             rewards = []
             next_observations = []
             dones = []
+            if video:
+                imgs = []
 
             observation = self.env.reset()
 
+            import pickle
+            old_actions = pickle.load(open('actions.pkl', 'rb'))
             for _ in range(self.max_traj_length):
-                action = policy(
-                    np.expand_dims(observation, 0), deterministic=deterministic
-                )[0, :]
+                # action = policy(
+                #     np.expand_dims(observation, 0), deterministic=deterministic
+                # )[0, :]
+                # if _ % 10 == 0:
+                #     action = policy(
+                #         np.expand_dims(observation, 0), deterministic=deterministic
+                #     )[0, :]
+                #     print(action, _)
+                # else:
+                #     action = action
+                #     print(action, _)
+                if _ % 10 == 0:
+                    action = old_actions[_//10]
+                    print(action, _)
+                else:
+                    action = action
+                    print(action, _)
                 next_observation, reward, done, _ = self.env.step(action)
                 observations.append(observation)
                 actions.append(action)
                 rewards.append(reward)
                 dones.append(done)
                 next_observations.append(next_observation)
+                if video:
+                    imgs.append(self.env.render(mode='rgb_array'))
 
                 if replay_buffer is not None:
                     replay_buffer.add_sample(
@@ -91,6 +111,10 @@ class TrajSampler(object):
                 if done:
                     break
 
+            # import pickle
+            # with open('actions.pkl','wb') as fp:
+            #     pickle.dump(actions, fp)
+
             trajs.append(dict(
                 observations=np.array(observations, dtype=np.float32),
                 actions=np.array(actions, dtype=np.float32),
@@ -98,6 +122,9 @@ class TrajSampler(object):
                 next_observations=np.array(next_observations, dtype=np.float32),
                 dones=np.array(dones, dtype=np.float32),
             ))
+            if video:
+                imgs = np.stack(imgs, axis=0)
+                np.savez('movie.npz', imgs)
 
         return trajs
 

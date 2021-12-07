@@ -53,6 +53,7 @@ FLAGS_DEF = define_flags_with_default(
 
 def main(argv):
     FLAGS = absl.flags.FLAGS
+    visualize_traj=True
 
     variant = get_user_flags(FLAGS, FLAGS_DEF)
     wandb_logger = WandBLogger(config=FLAGS.logging, variant=variant)
@@ -123,9 +124,20 @@ def main(argv):
 
         with Timer() as eval_timer:
             if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
+                my_seed = eval_sampler._env.seed(FLAGS.seed)
                 trajs = eval_sampler.sample(
-                    sampler_policy, FLAGS.eval_n_trajs, deterministic=True
+                    sampler_policy, FLAGS.eval_n_trajs, deterministic=True, video=visualize_traj
                 )
+
+                if visualize_traj:
+                    min_traj_len = min([len(t['actions']) for t in trajs])
+                    actions = [t['actions'][:min_traj_len] for t in trajs]
+                    mean_actions = np.mean(actions, axis=0)
+
+                    metrics['hip0'] = wandb_logger.plot(mean_actions[:,0])
+                    metrics['knee0'] = wandb_logger.plot(mean_actions[:,1])
+                    metrics['hip1'] = wandb_logger.plot(mean_actions[:,2])
+                    metrics['knee1'] = wandb_logger.plot(mean_actions[:,3])
 
                 metrics['average_return'] = np.mean([np.sum(t['rewards']) for t in trajs])
                 metrics['average_traj_length'] = np.mean([len(t['rewards']) for t in trajs])
