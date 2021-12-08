@@ -111,7 +111,7 @@ def main(argv):
         )
 
         qf1 = FullyConnectedQFunction(
-            eval_samplers[.1].env.observation_space.shape[0],
+            eval_samplers[.1].env.observation_space.shape[0]+1,
             eval_samplers[.1].env.action_space.shape[0],
             arch=FLAGS.qf_arch,
             orthogonal_init=FLAGS.orthogonal_init,
@@ -119,7 +119,7 @@ def main(argv):
         target_qf1 = deepcopy(qf1)
 
         qf2 = FullyConnectedQFunction(
-            eval_samplers[.1].env.observation_space.shape[0],
+            eval_samplers[.1].env.observation_space.shape[0]+1,
             eval_samplers[.1].env.action_space.shape[0],
             arch=FLAGS.qf_arch,
             orthogonal_init=FLAGS.orthogonal_init,
@@ -141,8 +141,25 @@ def main(argv):
         with Timer() as train_timer:
             for batch_idx in range(FLAGS.n_train_step_per_epoch):
                 per_dataset_batch_size = int(FLAGS.batch_size / 2)
+
                 batch1 = subsample_batch(datasets[.1], per_dataset_batch_size)
+                batch1['observations'] = np.hstack([
+                    batch1['observations'],
+                    np.ones((per_dataset_batch_size, 1))*.1]).astype(np.float32)
+                batch1['next_observations'] = np.hstack([
+                    batch1['next_observations'],
+                    np.ones((per_dataset_batch_size, 1))*.1]).astype(np.float32)
+
                 batch01 = subsample_batch(datasets[.01], per_dataset_batch_size)
+                # add a feature for dt
+                batch01['observations'] = np.hstack([
+                    batch01['observations'],
+                    np.ones((per_dataset_batch_size, 1))*.01]).astype(np.float32)
+                batch01['next_observations'] = np.hstack([
+                    batch01['next_observations'],
+                    np.ones((per_dataset_batch_size, 1))*.01]).astype(np.float32)
+
+                # create a batch which samples 50/50 from each buffer
                 batch = {}
                 for k in batch1.keys():
                     batch[k] = np.concatenate((batch1[k], batch01[k]), axis=0)

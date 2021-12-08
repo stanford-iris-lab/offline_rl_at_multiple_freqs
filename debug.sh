@@ -1,9 +1,4 @@
 #!/bin/bash
-#SBATCH --partition=iris-hi
-#SBATCH --mem=32G
-#SBATCH --gres=gpu:1
-#SBATCH --job-name="cql"
-#SBATCH --time=3-0:0
 
 source /sailhome/kayburns/.bashrc                                                  
 # source /sailhome/kayburns/set_cuda_paths.sh                                        
@@ -15,14 +10,12 @@ cd /iris/u/kayburns/continuous-rl/CQL
 export PYTHONPATH="$PYTHONPATH:$(pwd)"
 export MJLIB_PATH=/sailhome/kayburns/anaconda3/envs/py3.7_torch1.8/lib/python3.7/site-packages/mujoco_py/binaries/linux/mujoco210/bin/libmujoco210.so
 python -m SimpleSAC.conservative_sac_main \
-  --env "walker_${4}" \
-  --logging.output_dir "./experiments/.1_and_.01" \
-  --cql.cql_min_q_weight ${1} \
-  --cql.policy_lr ${2} \
-  --cql.qf_lr ${3} \
+  --env "walker_.01" \
+  --logging.output_dir "./debug/" \
   --cql.buffer_file ".1_and_.01" \
-  --device 'cuda' \
-  --save_model True
+  --n_epochs 1 \
+  --n_train_step_per_epoch 10 \
+  --device 'cuda' 
+  # --load_model 'debug/b77da20b7bf844ce9cfb9893a02e754e/'
 
-# 0.01: 5 1e-4 3e-4 .01
-# 0.1: 1 1e-4 3e-4 .1
+
