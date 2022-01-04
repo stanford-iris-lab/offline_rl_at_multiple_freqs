@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=iris-hi
+#SBATCH --exclude=iris-hp-z8
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --job-name="cql"
@@ -20,7 +21,8 @@ python -m SimpleSAC.conservative_sac_main \
   --cql.cql_min_q_weight ${1} \
   --cql.policy_lr ${2} \
   --cql.qf_lr ${3} \
-  --cql.buffer_file "/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/medium_buffer_${4}/data0.h5py" \
+  --cql.discount ${5} \
+  --cql.buffer_file "/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/half_buffer_1_${4}/data0.h5py" \
   --device 'cuda' \
   --save_model True
 
