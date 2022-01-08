@@ -1,6 +1,6 @@
 cql_min_q_weights=("1.0" "5.0")
-policy_lrs=("3e-5" "1e-4") # done:1e-4,3e-5 not done:3e-4 ("1e-4") #"3e-5" "3e-4")
-qf_lrs=("3e-4" "3e-5")
+policy_lrs=("1e-3" "3e-4") # done:1e-4,3e-5 not done:3e-4 ("1e-4") #"3e-5" "3e-4")
+qf_lrs=("3e-4")
 dts=(".01")
 
 for cql_min_q_weight in ${cql_min_q_weights[@]} ; do
