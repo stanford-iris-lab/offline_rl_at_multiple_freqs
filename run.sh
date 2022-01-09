@@ -16,12 +16,13 @@ cd /iris/u/kayburns/continuous-rl/CQL
 export PYTHONPATH="$PYTHONPATH:$(pwd)"
 export MJLIB_PATH=/sailhome/kayburns/anaconda3/envs/py3.7_torch1.8/lib/python3.7/site-packages/mujoco_py/binaries/linux/mujoco210/bin/libmujoco210.so
 python -m SimpleSAC.conservative_sac_main \
-  --env "walker_${4}" \
-  --logging.output_dir "./experiments/mix" \
+  --env "pendulum_${4}" \
+  --logging.output_dir "./experiments/pendulum/mix" \
   --cql.cql_min_q_weight ${1} \
   --cql.policy_lr ${2} \
   --cql.qf_lr ${3} \
-  --cql.buffer_file "mix" \
+  --cql.discount ${5} \
+  --cql.buffer_file "mix_pend" \
   --device 'cuda' \
   --save_model True
 

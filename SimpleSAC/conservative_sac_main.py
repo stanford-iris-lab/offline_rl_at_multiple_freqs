@@ -21,6 +21,7 @@ from .utils import Timer, define_flags_with_default, set_random_seed, print_flag
 from .utils import WandBLogger
 from viskit.logging import logger, setup_logger
 from dau.code.envs.biped import Walker
+from dau.code.envs.wrappers import WrapContinuousPendulumSparse
 
 
 FLAGS_DEF = define_flags_with_default(
@@ -84,23 +85,36 @@ def main(argv):
             dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
             datasets[dt] = dataset
 
-    # if "walker_" in FLAGS.env:
-    #     import pdb; pdb.set_trace()
-    #     dts = [float(x) for x in FLAGS.env.split('_')[1:]]
-    #     eval_samplers = {}
-    #     datasets = {}
-    #     for dt in dts:
-    #         max_traj_length = (1 / dt) * FLAGS.max_traj_length
-    #         eval_samplers[dt] = TrajSampler(Walker(dt), max_traj_length)
-    #         dataset = load_dataset(FLAGS.cql.buffer_file.format(dt))
-    #         dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
-    #         datasets[dt] = dataset
-    # else:
-    #     raise Exception("Environment is not supported. Try walker_{dt}.")
-    # else:
-    #     eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
-    # dataset = load_dataset(FLAGS.cql.buffer_file) # TODO
-    # dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
+        # dts = [float(x) for x in FLAGS.env.split('_')[1:]]
+        # eval_samplers = {}
+        # datasets = {}
+        # for dt in dts:
+        #     max_traj_length = (1 / dt) * FLAGS.max_traj_length
+        #     eval_samplers[dt] = TrajSampler(Walker(dt), max_traj_length)
+        #     dataset = load_dataset(FLAGS.cql.buffer_file.format(dt))
+        #     dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
+        #     datasets[dt] = dataset
+    elif "pendulum_" in FLAGS.env:
+        dt = float(FLAGS.env.split('_')[1])
+        env = gym.make('Pendulum-v1').unwrapped
+        env.dt = dt
+
+        datasets, eval_samplers = {}, {}
+        for dt in [.01, .02, .04]:
+            env = gym.make('Pendulum-v1').unwrapped
+            env.dt = dt
+            eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), FLAGS.max_traj_length)
+            # eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), int(100 * (1/dt)))
+            if dt == .02:
+                dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_1_{str(dt)[1:]}/data0.h5py")
+            else:
+                dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py")
+            dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
+            datasets[dt] = dataset
+    else:
+        eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
+    #dataset = load_dataset(FLAGS.cql.buffer_file) # TODO
+    #dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
 
     if FLAGS.load_model:
         sac = wandb_logger.load_pickle(FLAGS.load_model)['sac']
