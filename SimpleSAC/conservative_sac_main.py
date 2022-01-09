@@ -21,6 +21,7 @@ from .utils import Timer, define_flags_with_default, set_random_seed, print_flag
 from .utils import WandBLogger
 from viskit.logging import logger, setup_logger
 from dau.code.envs.biped import Walker
+from dau.code.envs.wrappers import WrapContinuousPendulumSparse
 
 
 FLAGS_DEF = define_flags_with_default(
@@ -70,6 +71,11 @@ def main(argv):
     if "walker_" in FLAGS.env:
         dt = float(FLAGS.env.split('_')[1])
         eval_sampler = TrajSampler(Walker(dt), FLAGS.max_traj_length) # TODO
+    elif "pendulum_" in FLAGS.env:
+        dt = float(FLAGS.env.split('_')[1])
+        env = gym.make('Pendulum-v1').unwrapped
+        env.dt = dt
+        eval_sampler = TrajSampler(WrapContinuousPendulumSparse(env), FLAGS.max_traj_length)
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
     dataset = load_dataset(FLAGS.cql.buffer_file) # TODO
