@@ -82,7 +82,10 @@ def main(argv):
     dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
 
     if FLAGS.load_model:
-        sac = wandb_logger.load_pickle(FLAGS.load_model)['sac']
+        loaded_model = wandb_logger.load_pickle(FLAGS.load_model)
+        print(f"Loaded model from epoch {loaded_model['epoch']}")
+        import pdb; pdb.set_trace()
+        sac = loaded_model['sac']
         policy = sac.policy
     else:
         policy = TanhGaussianPolicy(
@@ -140,10 +143,11 @@ def main(argv):
                     actions = [t['actions'][:min_traj_len] for t in trajs]
                     mean_actions = np.mean(actions, axis=0)
 
-                    metrics['hip0'] = wandb_logger.plot(mean_actions[:,0])
-                    metrics['knee0'] = wandb_logger.plot(mean_actions[:,1])
-                    metrics['hip1'] = wandb_logger.plot(mean_actions[:,2])
-                    metrics['knee1'] = wandb_logger.plot(mean_actions[:,3])
+                    if "walker_" in FLAGS.env:
+                        metrics['hip0'] = wandb_logger.plot(mean_actions[:,0])
+                        metrics['knee0'] = wandb_logger.plot(mean_actions[:,1])
+                        metrics['hip1'] = wandb_logger.plot(mean_actions[:,2])
+                        metrics['knee1'] = wandb_logger.plot(mean_actions[:,3])
 
                 metrics['average_return'] = np.mean([np.sum(t['rewards']) for t in trajs])
                 metrics['average_traj_length'] = np.mean([len(t['rewards']) for t in trajs])

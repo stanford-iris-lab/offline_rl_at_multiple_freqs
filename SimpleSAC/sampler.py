@@ -75,9 +75,9 @@ class TrajSampler(object):
             import pickle
             old_actions = pickle.load(open('actions.pkl', 'rb'))
             for _ in range(self.max_traj_length):
-                # action = policy(
-                #     np.expand_dims(observation, 0), deterministic=deterministic
-                # )[0, :]
+                action = policy(
+                    np.expand_dims(observation, 0), deterministic=deterministic
+                )[0, :]
                 # if _ % 10 == 0:
                 #     action = policy(
                 #         np.expand_dims(observation, 0), deterministic=deterministic
@@ -86,12 +86,12 @@ class TrajSampler(object):
                 # else:
                 #     action = action
                 #     print(action, _)
-                if _ % 10 == 0:
-                    action = old_actions[_//10]
-                    print(action, _)
-                else:
-                    action = action
-                    print(action, _)
+                # if _ % 10 == 0:
+                #     action = old_actions[_//10]
+                #     print(action, _)
+                # else:
+                #     action = action
+                #     print(action, _)
                 next_observation, reward, done, _ = self.env.step(action)
                 observations.append(observation)
                 actions.append(action)
