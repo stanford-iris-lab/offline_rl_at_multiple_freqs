@@ -17,9 +17,9 @@ export PYTHONPATH="$PYTHONPATH:$(pwd)"
 export MJLIB_PATH=/sailhome/kayburns/anaconda3/envs/py3.7_torch1.8/lib/python3.7/site-packages/mujoco_py/binaries/linux/mujoco210/bin/libmujoco210.so
 Xvfb :0 &
 DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
-  --env "pendulum_${4}" \
+  --env "walker_${4}" \
   --logging.output_dir "./experiments/${4}/" \
-  --load_model "/iris/u/kayburns/continuous-rl/CQL/experiments/.02/61750f982c6243c9898c572d835cf79c/" \
+  --load_model "/iris/u/kayburns/continuous-rl/CQL/experiments/bipedal_walker/mix_pcond/dee3a3106f39468c9513cb8bce3b9ba2/" \
   --cql.buffer_file "/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_1_${4}/data0.h5py" \
   --max_traj_length 1000 \
   --n_train_step_per_epoch 0 \

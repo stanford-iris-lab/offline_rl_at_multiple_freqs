@@ -75,6 +75,9 @@ class TrajSampler(object):
             import pickle
             old_actions = pickle.load(open('actions.pkl', 'rb'))
             for _ in range(self.max_traj_length):
+                # for dt conditioned policy
+                observation = np.hstack([
+                    observation, [self._env.dt]]).astype(np.float32)
                 action = policy(
                     np.expand_dims(observation, 0), deterministic=deterministic
                 )[0, :]
