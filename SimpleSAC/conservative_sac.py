@@ -92,7 +92,7 @@ class ConservativeSAC(object):
         next_observations = batch['next_observations']
         dones = batch['dones']
 
-        new_actions, log_pi = self.policy(observations[:,:-1])
+        new_actions, log_pi = self.policy(observations)
 
         if self.config.use_automatic_entropy_tuning:
             alpha_loss = -(self.log_alpha() * (log_pi + self.config.target_entropy).detach()).mean()
@@ -112,7 +112,7 @@ class ConservativeSAC(object):
         q1_pred = self.qf1(observations, actions)
         q2_pred = self.qf2(observations, actions)
 
-        new_next_actions, next_log_pi = self.policy(next_observations[:,:-1])
+        new_next_actions, next_log_pi = self.policy(next_observations)
         target_q_values = torch.min(
             self.target_qf1(next_observations, new_next_actions),
             self.target_qf2(next_observations, new_next_actions),
@@ -133,8 +133,8 @@ class ConservativeSAC(object):
             batch_size = actions.shape[0]
             action_dim = actions.shape[-1]
             cql_random_actions = actions.new_empty((batch_size, self.config.cql_n_actions, action_dim), requires_grad=False).uniform_(-1, 1)
-            cql_current_actions, cql_current_log_pis = self.policy(observations[:,:-1], repeat=self.config.cql_n_actions)
-            cql_next_actions, cql_next_log_pis = self.policy(next_observations[:,:-1], repeat=self.config.cql_n_actions)
+            cql_current_actions, cql_current_log_pis = self.policy(observations, repeat=self.config.cql_n_actions)
+            cql_next_actions, cql_next_log_pis = self.policy(next_observations, repeat=self.config.cql_n_actions)
             cql_current_actions, cql_current_log_pis = cql_current_actions.detach(), cql_current_log_pis.detach()
             cql_next_actions, cql_next_log_pis = cql_next_actions.detach(), cql_next_log_pis.detach()
 

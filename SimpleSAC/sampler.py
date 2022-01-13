@@ -71,6 +71,8 @@ class TrajSampler(object):
             observation = self.env.reset()
 
             for _ in range(self.max_traj_length):
+                observation = np.hstack([
+                    observation, [self._env.dt]]).astype(np.float32)
                 action = policy(
                     np.expand_dims(observation, 0), deterministic=deterministic
                 )[0, :]

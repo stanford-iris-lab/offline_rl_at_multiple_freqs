@@ -121,7 +121,7 @@ def main(argv):
         policy = sac.policy
     else:
         policy = TanhGaussianPolicy(
-            eval_samplers[.01].env.observation_space.shape[0],
+            eval_samplers[.01].env.observation_space.shape[0]+1,
             eval_samplers[.01].env.action_space.shape[0],
             arch=FLAGS.policy_arch,
             log_std_multiplier=FLAGS.policy_log_std_multiplier,
