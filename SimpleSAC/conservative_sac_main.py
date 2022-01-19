@@ -45,6 +45,7 @@ FLAGS_DEF = define_flags_with_default(
     eval_period=10,
     eval_n_trajs=5,
     load_model='',
+    visualize_traj=False,
 
     cql=ConservativeSAC.get_default_config(),
     logging=WandBLogger.get_default_config(),
@@ -53,7 +54,6 @@ FLAGS_DEF = define_flags_with_default(
 
 def main(argv):
     FLAGS = absl.flags.FLAGS
-    visualize_traj=True
 
     variant = get_user_flags(FLAGS, FLAGS_DEF)
     wandb_logger = WandBLogger(config=FLAGS.logging, variant=variant)
@@ -131,25 +131,24 @@ def main(argv):
 
         with Timer() as eval_timer:
             if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
-                my_seed = eval_sampler._env.seed(FLAGS.seed)
-                # trajs = eval_sampler.sample(
-                #     sampler_policy, FLAGS.eval_n_trajs, deterministic=True, video=visualize_traj
-                # )
+                # my_seed = eval_sampler._env.seed(FLAGS.seed)
+                trajs = eval_sampler.sample(
+                    sampler_policy, FLAGS.eval_n_trajs, deterministic=True, video=FLAGS.visualize_traj
+                )
 
-                if visualize_traj:
-                    # min_traj_len = min([len(t['actions']) for t in trajs])
-                    # actions = [t['actions'][:min_traj_len] for t in trajs]
-                    # mean_actions = np.mean(actions, axis=0)
-
+                if FLAGS.visualize_traj or epoch % 100 == 99:
                     if "walker_" in FLAGS.env:
+                        min_traj_len = min([len(t['actions']) for t in trajs])
+                        actions = [t['actions'][:min_traj_len] for t in trajs]
+                        mean_actions = np.mean(actions, axis=0)
                         metrics['hip0'] = wandb_logger.plot(mean_actions[:,0])
                         metrics['knee0'] = wandb_logger.plot(mean_actions[:,1])
                         metrics['hip1'] = wandb_logger.plot(mean_actions[:,2])
                         metrics['knee1'] = wandb_logger.plot(mean_actions[:,3])
                     elif "pendulum_" in FLAGS.env:
-                        generate_pendulum_visualization(sac.policy, sac.qf1, sac.qf2, .02)
-                        generate_pendulum_visualization(sac.policy, sac.qf1, sac.qf2, .01)
-                        generate_pendulum_visualization(sac.policy, sac.qf1, sac.qf2, .04)
+                        generate_pendulum_visualization(
+                            sac.policy, sac.qf1, sac.qf2, wandb_logger,
+                            f'val_dt{dt}_epoch{epoch}.png', env.dt)
 
                 metrics['average_return'] = np.mean([np.sum(t['rewards']) for t in trajs])
                 metrics['average_traj_length'] = np.mean([len(t['rewards']) for t in trajs])

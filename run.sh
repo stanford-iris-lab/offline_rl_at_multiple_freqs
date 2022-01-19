@@ -17,20 +17,19 @@ export PYTHONPATH="$PYTHONPATH:$(pwd)"
 export MJLIB_PATH=/sailhome/kayburns/anaconda3/envs/py3.7_torch1.8/lib/python3.7/site-packages/mujoco_py/binaries/linux/mujoco210/bin/libmujoco210.so
 Xvfb :0 &
 DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
-  --env "walker_${4}" \
+  --env "pendulum_${4}" \
   --logging.output_dir "./experiments/${4}/" \
-  --load_model "/iris/u/kayburns/continuous-rl/CQL/experiments/bipedal_walker/mix_pcond/dee3a3106f39468c9513cb8bce3b9ba2/" \
-  --cql.buffer_file "/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_1_${4}/data0.h5py" \
-  --max_traj_length 1000 \
-  --n_train_step_per_epoch 0 \
-  --n_epochs 1 \
-  --eval_n_trajs 1 \
+  --logging.online True \
+  --cql.cql_min_q_weight ${1} \
+  --cql.policy_lr ${2} \
+  --cql.qf_lr ${3} \
+  --cql.discount ${5} \
+  --cql.buffer_file "/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_${4}/data0.h5py" \
   --device 'cuda' \
-#   --save_model True
-python vid_from_npz.py \
-  --npz_file ./movie.npz \
-  --fps 50 --output_file ./vid.mp4
+  --save_model True
 
 # 0.001: 5 1e-4 3e-4 .001 .9999
 # 0.01: 5 1e-4 3e-4 .01 .999
 # 0.1: 1 1e-4 3e-4 .1 .99
+
+# half_buffer_1 for .02

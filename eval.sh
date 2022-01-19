@@ -35,11 +35,8 @@ DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
   --n_train_step_per_epoch 0 \
   --device 'cuda' \
   --eval_n_trajs 1 \
-  --max_traj_length 10000 \
-  --load_model 'experiments/pendulum/mix_pcond/ad794d1af211434f9cab06cfd0784b5f/' # mixed
-python vid_from_npz.py \
-  --npz_file ./movie.npz \
-  --fps 100 --output_file ./vid.mp4
+  --max_traj_length 1000 \
+  --load_model 'experiments/.04/ff575473fc2541f9bfec0779b74e9486/'
 # load options
   # --load_model 'experiments/pendulum/mix_pcond/ad794d1af211434f9cab06cfd0784b5f/' # mixed
   # --load_model 'experiments/.02/aec001f95d094fa598456707e8c81814' # 02 alone
