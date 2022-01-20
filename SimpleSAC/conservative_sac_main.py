@@ -78,7 +78,7 @@ def main(argv):
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
     dataset = load_dataset(FLAGS.cql.buffer_file) # TODO
-    dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
+    # dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
 
     if FLAGS.load_model:
         loaded_model = wandb_logger.load_pickle(FLAGS.load_model)
@@ -119,15 +119,16 @@ def main(argv):
 
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
 
+    n = .16/env.dt
     viskit_metrics = {}
     for epoch in range(FLAGS.n_epochs):
         metrics = {'epoch': epoch}
 
         with Timer() as train_timer:
             for batch_idx in range(FLAGS.n_train_step_per_epoch):
-                batch = subsample_batch(dataset, FLAGS.batch_size)
+                batch = subsample_batch(dataset, FLAGS.batch_size, n)
                 batch = batch_to_torch(batch, FLAGS.device)
-                metrics.update(prefix_metrics(sac.train(batch), 'sac'))
+                metrics.update(prefix_metrics(sac.train(batch, n), 'sac'))
 
         with Timer() as eval_timer:
             if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:

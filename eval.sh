@@ -30,13 +30,14 @@ Xvfb :0 &
 DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
   --env "pendulum_.02" \
   --logging.output_dir "./debug/" \
-  --cql.buffer_file "/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/medium_buffer_.1/data0.h5py" \
+  --logging.online False \
+  --cql.buffer_file "/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_.04/data0.h5py" \
   --n_epochs 1 \
-  --n_train_step_per_epoch 0 \
+  --n_train_step_per_epoch 1 \
   --device 'cuda' \
   --eval_n_trajs 1 \
   --max_traj_length 1000 \
-  --load_model 'experiments/.04/ff575473fc2541f9bfec0779b74e9486/'
+  --load_model 'experiments/.01/637f04a5c90a4fd38cb54658ef4dd11f/'
 # load options
   # --load_model 'experiments/pendulum/mix_pcond/ad794d1af211434f9cab06cfd0784b5f/' # mixed
   # --load_model 'experiments/.02/aec001f95d094fa598456707e8c81814' # 02 alone
