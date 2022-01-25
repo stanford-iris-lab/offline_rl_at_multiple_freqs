@@ -46,6 +46,7 @@ FLAGS_DEF = define_flags_with_default(
     eval_n_trajs=5,
     load_model='',
     visualize_traj=False,
+    N=.08,
 
     cql=ConservativeSAC.get_default_config(),
     logging=WandBLogger.get_default_config(),
@@ -119,7 +120,7 @@ def main(argv):
 
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
 
-    n = .16/env.dt
+    n = FLAGS.N/env.dt
     viskit_metrics = {}
     for epoch in range(FLAGS.n_epochs):
         metrics = {'epoch': epoch}
