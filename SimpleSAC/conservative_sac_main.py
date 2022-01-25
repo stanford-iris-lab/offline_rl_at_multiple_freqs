@@ -17,8 +17,7 @@ from .conservative_sac import ConservativeSAC
 from .replay_buffer import batch_to_torch, subsample_batch, load_dataset
 from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
 from .sampler import StepSampler, TrajSampler
-from .utils import Timer, define_flags_with_default, set_random_seed, print_flags, get_user_flags, prefix_metrics
-from .utils import WandBLogger
+from .utils import *
 from viskit.logging import logger, setup_logger
 from dau.code.envs.biped import Walker
 from dau.code.envs.wrappers import WrapContinuousPendulumSparse
@@ -46,6 +45,8 @@ FLAGS_DEF = define_flags_with_default(
     eval_period=10,
     eval_n_trajs=5,
     load_model='',
+    visualize_traj=False,
+    N=.08,
 
     cql=ConservativeSAC.get_default_config(),
     logging=WandBLogger.get_default_config(),
@@ -117,7 +118,9 @@ def main(argv):
     #dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
 
     if FLAGS.load_model:
-        sac = wandb_logger.load_pickle(FLAGS.load_model)['sac']
+        loaded_model = wandb_logger.load_pickle(FLAGS.load_model)
+        print(f"Loaded model from epoch {loaded_model['epoch']}")
+        sac = loaded_model['sac']
         policy = sac.policy
     else:
         policy = TanhGaussianPolicy(
@@ -153,6 +156,7 @@ def main(argv):
 
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
 
+    n = FLAGS.N/env.dt
     viskit_metrics = {}
     for epoch in range(FLAGS.n_epochs):
         metrics = {'epoch': epoch}
@@ -178,14 +182,29 @@ def main(argv):
                 for k in batch_dts[0].keys():
                     batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
-                metrics.update(prefix_metrics(sac.train(batch), 'sac'))
+                metrics.update(prefix_metrics(sac.train(batch, n), 'sac'))
 
         with Timer() as eval_timer:
             for dt, eval_sampler in eval_samplers.items():
                 if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
+                    # my_seed = eval_sampler._env.seed(FLAGS.seed)
                     trajs = eval_sampler.sample(
-                        sampler_policy, FLAGS.eval_n_trajs, deterministic=True
+                        sampler_policy, FLAGS.eval_n_trajs, deterministic=True, video=FLAGS.visualize_traj
                     )
+
+                    if FLAGS.visualize_traj or epoch % 100 == 99:
+                        if "walker_" in FLAGS.env:
+                            min_traj_len = min([len(t['actions']) for t in trajs])
+                            actions = [t['actions'][:min_traj_len] for t in trajs]
+                            mean_actions = np.mean(actions, axis=0)
+                            metrics['hip0'] = wandb_logger.plot(mean_actions[:,0])
+                            metrics['knee0'] = wandb_logger.plot(mean_actions[:,1])
+                            metrics['hip1'] = wandb_logger.plot(mean_actions[:,2])
+                            metrics['knee1'] = wandb_logger.plot(mean_actions[:,3])
+                        elif "pendulum_" in FLAGS.env:
+                            generate_pendulum_visualization(
+                                sac.policy, sac.qf1, sac.qf2, wandb_logger,
+                                f'val_dt{dt}_epoch{epoch}.png', env.dt)
 
                     metrics[f'average_return_{dt}'] = np.mean([np.sum(t['rewards']) for t in trajs])
                     metrics[f'average_traj_length_{dt}'] = np.mean([len(t['rewards']) for t in trajs])

@@ -115,19 +115,26 @@ def batch_to_torch(batch, device):
 
 def load_dataset(h5path):
     dataset_file = h5py.File(h5path, "r")
-    return dict(
+    dataset = dict(
         observations=dataset_file["obs"][:].astype(np.float32),
         actions=dataset_file["actions"][:].astype(np.float32),
         next_observations=dataset_file["next_obs"][:].astype(np.float32),
         rewards=dataset_file["rewards"][:].astype(np.float32),
         dones=dataset_file["dones"][:].astype(np.float32),
     )
+    for k, v in dataset.items():
+        if len(v.shape) > 1:
+            dim_obs = v.shape[1]
+        else:
+            dim_obs = 1
+        dataset[k] = v.reshape(-1, 256, dim_obs) # this only works for pendulum
+    return dataset
 
 
-def index_batch(batch, indices):
+def index_batch(batch, indices, size, n):
     indexed = {}
     for key in batch.keys():
-        indexed[key] = batch[key][indices, ...]
+        indexed[key] = batch[key][indices[0], indices[1]].reshape(size, int(n), -1)
     return indexed
 
 
@@ -138,9 +145,14 @@ def parition_batch_train_test(batch, train_ratio):
     return train_batch, test_batch
 
 
-def subsample_batch(batch, size):
-    indices = np.random.randint(batch['observations'].shape[0], size=size)
-    return index_batch(batch, indices)
+def subsample_batch(batch, size, n):
+    ascending_idxs = np.tile(np.arange(n), size)
+    traj_indices = np.random.randint(batch['observations'].shape[0]-n, size=size)
+    traj_indices = np.repeat(traj_indices, n) + ascending_idxs
+    batch_indices = np.random.randint(batch['observations'].shape[1], size=size)
+    batch_indices = np.repeat(batch_indices, n)
+    indices = np.vstack((traj_indices, batch_indices)).astype(int) # should be T, B
+    return index_batch(batch, indices, size, n)
 
 
 def concatenate_batches(batches):

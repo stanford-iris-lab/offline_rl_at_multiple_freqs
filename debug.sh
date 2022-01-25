@@ -12,7 +12,7 @@ export MJLIB_PATH=/sailhome/kayburns/anaconda3/envs/py3.7_torch1.8/lib/python3.7
 python -m SimpleSAC.conservative_sac_main \
   --env "walker_.01" \
   --logging.output_dir "./debug/" \
-  --cql.buffer_file ".1_and_.01" \
+  --cql.buffer_file "mix_pendulum" \
   --n_epochs 1 \
   --n_train_step_per_epoch 10 \
   --device 'cuda' 

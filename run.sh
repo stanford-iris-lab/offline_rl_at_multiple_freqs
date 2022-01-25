@@ -15,16 +15,21 @@ export PYTHONPATH="$PYTHONPATH:$(pwd)"
 cd /iris/u/kayburns/continuous-rl/CQL
 export PYTHONPATH="$PYTHONPATH:$(pwd)"
 export MJLIB_PATH=/sailhome/kayburns/anaconda3/envs/py3.7_torch1.8/lib/python3.7/site-packages/mujoco_py/binaries/linux/mujoco210/bin/libmujoco210.so
-python -m SimpleSAC.conservative_sac_main \
-  --env "walker_${4}" \
-  --logging.output_dir "./experiments/bipedal_walker/mix_pcond" \
+Xvfb :0 &
+DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
+  --env "pendulum_${4}" \
+  --logging.output_dir "./experiments/mix/" \
+  --logging.online True \
   --cql.cql_min_q_weight ${1} \
   --cql.policy_lr ${2} \
   --cql.qf_lr ${3} \
   --cql.discount ${5} \
-  --cql.buffer_file "mix_walker_pcond" \
+  --cql.buffer_file "mix_pendulum" \
   --device 'cuda' \
   --save_model True
 
-# 0.01: 5 1e-4 3e-4 .01
-# 0.1: 1 1e-4 3e-4 .1
+# 0.001: 5 1e-4 3e-4 .001 .9999
+# 0.01: 5 1e-4 3e-4 .01 .999
+# 0.1: 1 1e-4 3e-4 .1 .99
+
+# half_buffer_1 for .02

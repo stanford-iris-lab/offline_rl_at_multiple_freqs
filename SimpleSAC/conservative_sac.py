@@ -83,7 +83,7 @@ class ConservativeSAC(object):
         soft_target_update(self.qf1, self.target_qf1, soft_target_update_rate)
         soft_target_update(self.qf2, self.target_qf2, soft_target_update_rate)
 
-    def train(self, batch):
+    def train(self, batch, n):
         self._total_steps += 1
 
         observations = batch['observations']
@@ -92,7 +92,7 @@ class ConservativeSAC(object):
         next_observations = batch['next_observations']
         dones = batch['dones']
 
-        new_actions, log_pi = self.policy(observations)
+        new_actions, log_pi = self.policy(observations[:,0,:])
 
         if self.config.use_automatic_entropy_tuning:
             alpha_loss = -(self.log_alpha() * (log_pi + self.config.target_entropy).detach()).mean()
@@ -103,25 +103,29 @@ class ConservativeSAC(object):
 
         """ Policy loss """
         q_new_actions = torch.min(
-            self.qf1(observations, new_actions),
-            self.qf2(observations, new_actions),
+            self.qf1(observations[:,0,:], new_actions),
+            self.qf2(observations[:,0,:], new_actions),
         )
         policy_loss = (alpha*log_pi - q_new_actions).mean()
 
         """ Q function loss """
-        q1_pred = self.qf1(observations, actions)
-        q2_pred = self.qf2(observations, actions)
+        q1_pred = self.qf1(observations[:,-1,:], actions[:,-1,:])
+        q2_pred = self.qf2(observations[:,-1,:], actions[:,-1,:])
 
-        new_next_actions, next_log_pi = self.policy(next_observations)
+        new_next_actions, next_log_pi = self.policy(next_observations[:,-1,:])
         target_q_values = torch.min(
-            self.target_qf1(next_observations, new_next_actions),
-            self.target_qf2(next_observations, new_next_actions),
+            self.target_qf1(next_observations[:,-1,:], new_next_actions),
+            self.target_qf2(next_observations[:,-1,:], new_next_actions),
         )
 
         if self.config.backup_entropy:
             target_q_values = target_q_values - alpha * next_log_pi
 
-        q_target = rewards + (1. - dones) * self.config.discount * target_q_values
+        # q_target = rewards + (1. - dones) * self.config.discount * target_q_values
+        discounts = torch.Tensor(
+            [self.config.discount**i for i in range(int(n)-1)]).cuda()
+        summed_reward = torch.sum(rewards[:,:-1,0]*discounts, axis=1)
+        q_target = summed_reward + (1. - dones[:,-1,0]) * (self.config.discount**n-1) * target_q_values
         qf1_loss = F.mse_loss(q1_pred, q_target.detach())
         qf2_loss = F.mse_loss(q2_pred, q_target.detach())
 
@@ -130,6 +134,11 @@ class ConservativeSAC(object):
         if not self.config.use_cql:
             qf_loss = qf1_loss + qf2_loss
         else:
+            observations = batch['observations'][:,-1,:]
+            actions = batch['actions'][:,-1,:]
+            rewards = batch['rewards'][:,-1,0]
+            next_observations = batch['next_observations'][:,-1,:]
+            dones = batch['dones'][:,-1,0]
             batch_size = actions.shape[0]
             action_dim = actions.shape[-1]
             cql_random_actions = actions.new_empty((batch_size, self.config.cql_n_actions, action_dim), requires_grad=False).uniform_(-1, 1)

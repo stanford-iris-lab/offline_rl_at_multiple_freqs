@@ -9,6 +9,7 @@ from socket import gethostname
 import pickle
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 import absl.flags
 from absl import logging
@@ -54,6 +55,13 @@ class WandBLogger(object):
         if updates is not None:
             config.update(ConfigDict(updates).copy_and_resolve_references())
         return config
+    
+    @staticmethod
+    def plot(y_values):
+        x_values = np.arange(0, len(y_values)/10, .1)
+        data = [[x, y] for (x, y) in zip(x_values, y_values)]
+        table = wandb.Table(data=data, columns = ["x", "y"])
+        return wandb.plot.line(table, "x", "y")
 
     def __init__(self, config, variant):
         self.config = self.get_default_config(config)
@@ -90,8 +98,8 @@ class WandBLogger(object):
                 start_method="thread",
                 _disable_stats=True,
             ),
-            mode='online'
-            # mode='online' if self.config.online else 'offline',
+            # mode='online'
+            mode='online' if self.config.online else 'offline',
         )
 
     def log(self, *args, **kwargs):
@@ -100,6 +108,10 @@ class WandBLogger(object):
     def save_pickle(self, obj, filename):
         with open(os.path.join(self.config.output_dir, filename), 'wb') as fout:
             pickle.dump(obj, fout)
+    
+    def save_image(self, image, filename):
+        plt.imshow(image)
+        plt.savefig(os.path.join(self.config.output_dir, filename))
     
     def load_pickle(self, loaddir):
         with open(os.path.join(loaddir, 'model.pkl'), 'rb') as fout:
@@ -183,3 +195,38 @@ def prefix_metrics(metrics, prefix):
     return {
         '{}/{}'.format(prefix, key): value for key, value in metrics.items()
     }
+
+# Pendulum visualizations adapted from https://github.com/ctallec/continuous-rl
+def th_to_arr(tens: torch.Tensor) -> np.ndarray:
+    """Tensorable to numpy array."""
+    return tens.cpu().detach().numpy()
+
+def arr_to_th(arr) -> torch.Tensor:
+    """Arrayable to tensor."""
+
+    return torch.from_numpy(arr).float().to('cuda')
+
+def generate_pendulum_visualization(policy, qf1, qf2, logger, filename, dt=.02):
+    nb_pixels = 50
+    theta_space = np.linspace(-np.pi, np.pi, nb_pixels)
+    dtheta_space = np.linspace(-10, 10, nb_pixels)
+    theta, dtheta = np.meshgrid(theta_space, dtheta_space)
+    state_space = np.stack([np.cos(theta), np.sin(theta), dtheta], axis=-1)
+    target_shape = state_space.shape[:2]
+    state_space = arr_to_th(state_space).reshape(-1, 3)
+
+    observation = state_space
+    # dt_feat = (torch.ones((state_space.shape[0], 1)) * dt).cuda()
+    # observation = torch.hstack([state_space, dt_feat])
+    actions = policy(observation)[0]
+    values = qf1(observation, actions).reshape(target_shape).squeeze()
+
+    # normalize values and visualize with plasma colormap
+    values = (values - values.mean()) / values.std()
+    # for pendulum consistency
+    # max_R = 10000
+    # values = (values - (max_R/2)) / (max_R/2)
+    vis_values = th_to_arr(values)
+    vis_values = plt.get_cmap("plasma")(vis_values)
+    logger.save_image(vis_values, filename)
+    
