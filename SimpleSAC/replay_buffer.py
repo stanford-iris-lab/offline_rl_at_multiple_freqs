@@ -131,10 +131,10 @@ def load_dataset(h5path):
     return dataset
 
 
-def index_batch(batch, indices, size, n):
+def index_batch(batch, indices, size, n_steps):
     indexed = {}
     for key in batch.keys():
-        indexed[key] = batch[key][indices[0], indices[1]].reshape(size, int(n), -1)
+        indexed[key] = batch[key][indices[0], indices[1]].reshape(size, int(n_steps), -1)
     return indexed
 
 
@@ -145,14 +145,17 @@ def parition_batch_train_test(batch, train_ratio):
     return train_batch, test_batch
 
 
-def subsample_batch(batch, size, n):
-    ascending_idxs = np.tile(np.arange(n), size)
-    traj_indices = np.random.randint(batch['observations'].shape[0]-n, size=size)
-    traj_indices = np.repeat(traj_indices, n) + ascending_idxs
-    batch_indices = np.random.randint(batch['observations'].shape[1], size=size)
-    batch_indices = np.repeat(batch_indices, n)
+def subsample_batch(batch, size, n_steps):
+    ascending_idxs = np.tile(np.arange(n_steps), size)
+    # pick random steps in trajectory
+    traj_indices = np.random.randint(batch['rewards'].shape[0]-n_steps, size=size)
+    # add next n_steps to trajectory indices
+    traj_indices = np.repeat(traj_indices, n_steps) + ascending_idxs
+    # pick trajectories from batch and repeat for n steps
+    batch_indices = np.random.randint(batch['rewards'].shape[1], size=size)
+    batch_indices = np.repeat(batch_indices, n_steps)
     indices = np.vstack((traj_indices, batch_indices)).astype(int) # should be T, B
-    return index_batch(batch, indices, size, n)
+    return index_batch(batch, indices, size, n_steps)
 
 
 def concatenate_batches(batches):

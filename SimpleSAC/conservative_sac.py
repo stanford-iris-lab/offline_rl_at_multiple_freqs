@@ -83,7 +83,7 @@ class ConservativeSAC(object):
         soft_target_update(self.qf1, self.target_qf1, soft_target_update_rate)
         soft_target_update(self.qf2, self.target_qf2, soft_target_update_rate)
 
-    def train(self, batch, n):
+    def train(self, batch, n_steps):
         self._total_steps += 1
 
         observations = batch['observations']
@@ -122,10 +122,11 @@ class ConservativeSAC(object):
             target_q_values = target_q_values - alpha * next_log_pi
 
         # q_target = rewards + (1. - dones) * self.config.discount * target_q_values
+        import pdb; pdb.set_trace()
         discounts = torch.Tensor(
-            [self.config.discount**i for i in range(int(n)-1)]).cuda()
+            [self.config.discount**i for i in range(int(n_steps)-1)]).cuda()
         summed_reward = torch.sum(rewards[:,:-1,0]*discounts, axis=1)
-        q_target = summed_reward + (1. - dones[:,-1,0]) * (self.config.discount**n-1) * target_q_values
+        q_target = summed_reward + (1. - dones[:,-1,0]) * (self.config.discount**n_steps-1) * target_q_values
         qf1_loss = F.mse_loss(q1_pred, q_target.detach())
         qf2_loss = F.mse_loss(q2_pred, q_target.detach())
 

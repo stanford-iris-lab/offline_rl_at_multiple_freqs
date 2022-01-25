@@ -46,7 +46,7 @@ FLAGS_DEF = define_flags_with_default(
     eval_n_trajs=5,
     load_model='',
     visualize_traj=False,
-    N=.08,
+    N_steps=.08,
 
     cql=ConservativeSAC.get_default_config(),
     logging=WandBLogger.get_default_config(),
@@ -156,8 +156,8 @@ def main(argv):
 
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
 
-    n = FLAGS.N/env.dt
     viskit_metrics = {}
+    dts = [.01, .02, .04]
     for epoch in range(FLAGS.n_epochs):
         metrics = {'epoch': epoch}
 
@@ -166,8 +166,9 @@ def main(argv):
                 per_dataset_batch_size = int(FLAGS.batch_size / 3)
 
                 batch_dts = []
-                for dt in [.01, .02, .04]:
-                    batch_dt = subsample_batch(datasets[dt], per_dataset_batch_size)
+                for dt in dts:
+                    n_steps = FLAGS.N_steps / dt
+                    batch_dt = subsample_batch(datasets[dt], per_dataset_batch_size, n_steps)
                     # add a feature for dt
                     batch_dt['observations'] = np.hstack([
                         batch_dt['observations'],
@@ -180,9 +181,13 @@ def main(argv):
                 # create a batch which samples equally from each buffer
                 batch = {}
                 for k in batch_dts[0].keys():
-                    batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
+                    if 
+                    else:
+                        batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
-                metrics.update(prefix_metrics(sac.train(batch, n), 'sac'))
+                n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
+                n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
+                metrics.update(prefix_metrics(sac.train(batch, n_steps), 'sac'))
 
         with Timer() as eval_timer:
             for dt, eval_sampler in eval_samplers.items():
