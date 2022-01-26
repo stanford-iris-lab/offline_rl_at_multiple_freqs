@@ -108,25 +108,30 @@ class ConservativeSAC(object):
         )
         policy_loss = (alpha*log_pi - q_new_actions).mean()
 
+        next_idx = np.vstack(
+            (np.arange(observations.shape[0]), (n_steps-1).long()))
         """ Q function loss """
-        q1_pred = self.qf1(observations[:,-1,:], actions[:,-1,:])
-        q2_pred = self.qf2(observations[:,-1,:], actions[:,-1,:])
+        q1_pred = self.qf1(observations[next_idx], actions[next_idx])
+        q2_pred = self.qf2(observations[next_idx], actions[next_idx])
 
-        new_next_actions, next_log_pi = self.policy(next_observations[:,-1,:])
+        new_next_actions, next_log_pi = self.policy(next_observations[next_idx])
         target_q_values = torch.min(
-            self.target_qf1(next_observations[:,-1,:], new_next_actions),
-            self.target_qf2(next_observations[:,-1,:], new_next_actions),
+            self.target_qf1(next_observations[next_idx], new_next_actions),
+            self.target_qf2(next_observations[next_idx], new_next_actions),
         )
 
         if self.config.backup_entropy:
             target_q_values = target_q_values - alpha * next_log_pi
 
         # q_target = rewards + (1. - dones) * self.config.discount * target_q_values
-        import pdb; pdb.set_trace()
+        max_n = int(n_steps.max())
+        batch_size = rewards.shape[0]
         discounts = torch.Tensor(
-            [self.config.discount**i for i in range(int(n_steps)-1)]).cuda()
-        summed_reward = torch.sum(rewards[:,:-1,0]*discounts, axis=1)
-        q_target = summed_reward + (1. - dones[:,-1,0]) * (self.config.discount**n_steps-1) * target_q_values
+            [self.config.discount**i for i in range(max_n)]).cuda()
+        pre_mask = torch.repeat_interleave(torch.arange(max_n), batch_size).reshape((-1, batch_size)).T # :(
+        mask = (pre_mask <= (n_steps - 1).reshape(-1, 1)).cuda()
+        summed_reward = torch.sum(rewards.squeeze()*discounts*mask, axis=1)
+        q_target = summed_reward + (1. - dones[next_idx]).squeeze() * (self.config.discount**n_steps-1).cuda() * target_q_values
         qf1_loss = F.mse_loss(q1_pred, q_target.detach())
         qf2_loss = F.mse_loss(q2_pred, q_target.detach())
 
@@ -135,11 +140,11 @@ class ConservativeSAC(object):
         if not self.config.use_cql:
             qf_loss = qf1_loss + qf2_loss
         else:
-            observations = batch['observations'][:,-1,:]
-            actions = batch['actions'][:,-1,:]
-            rewards = batch['rewards'][:,-1,0]
-            next_observations = batch['next_observations'][:,-1,:]
-            dones = batch['dones'][:,-1,0]
+            observations = batch['observations'][next_idx]
+            actions = batch['actions'][next_idx]
+            rewards = batch['rewards'][next_idx]
+            next_observations = batch['next_observations'][next_idx].squeeze()
+            dones = batch['dones'][next_idx].squeeze()
             batch_size = actions.shape[0]
             action_dim = actions.shape[-1]
             cql_random_actions = actions.new_empty((batch_size, self.config.cql_n_actions, action_dim), requires_grad=False).uniform_(-1, 1)

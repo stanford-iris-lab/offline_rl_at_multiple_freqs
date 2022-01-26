@@ -216,8 +216,8 @@ def generate_pendulum_visualization(policy, qf1, qf2, logger, filename, dt=.02):
     state_space = arr_to_th(state_space).reshape(-1, 3)
 
     observation = state_space
-    # dt_feat = (torch.ones((state_space.shape[0], 1)) * dt).cuda()
-    # observation = torch.hstack([state_space, dt_feat])
+    dt_feat = (torch.ones((state_space.shape[0], 1)) * dt).cuda()
+    observation = torch.hstack([state_space, dt_feat])
     actions = policy(observation)[0]
     values = qf1(observation, actions).reshape(target_shape).squeeze()
 

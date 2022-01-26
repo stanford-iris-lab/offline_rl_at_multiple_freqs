@@ -18,7 +18,7 @@ export MJLIB_PATH=/sailhome/kayburns/anaconda3/envs/py3.7_torch1.8/lib/python3.7
 Xvfb :0 &
 DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
   --env "pendulum_${4}" \
-  --logging.output_dir "./experiments/mix/" \
+  --logging.output_dir "./experiments/mix_nstep/" \
   --logging.online True \
   --cql.cql_min_q_weight ${1} \
   --cql.policy_lr ${2} \

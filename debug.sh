@@ -10,7 +10,7 @@ cd /iris/u/kayburns/continuous-rl/CQL
 export PYTHONPATH="$PYTHONPATH:$(pwd)"
 export MJLIB_PATH=/sailhome/kayburns/anaconda3/envs/py3.7_torch1.8/lib/python3.7/site-packages/mujoco_py/binaries/linux/mujoco210/bin/libmujoco210.so
 python -m SimpleSAC.conservative_sac_main \
-  --env "walker_.01" \
+  --env "pendulum_.01" \
   --logging.output_dir "./debug/" \
   --cql.buffer_file "mix_pendulum" \
   --n_epochs 1 \

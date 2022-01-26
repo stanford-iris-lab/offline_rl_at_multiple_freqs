@@ -106,10 +106,7 @@ def main(argv):
             env.dt = dt
             eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), FLAGS.max_traj_length)
             # eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), int(100 * (1/dt)))
-            if dt == .02:
-                dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_1_{str(dt)[1:]}/data0.h5py")
-            else:
-                dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py")
+            dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py")
             dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
             datasets[dt] = dataset
     else:
@@ -166,24 +163,24 @@ def main(argv):
                 per_dataset_batch_size = int(FLAGS.batch_size / 3)
 
                 batch_dts = []
+                max_steps = int(FLAGS.N_steps / min(dts))
                 for dt in dts:
-                    n_steps = FLAGS.N_steps / dt
-                    batch_dt = subsample_batch(datasets[dt], per_dataset_batch_size, n_steps)
+                    batch_dt = subsample_batch(
+                        datasets[dt], per_dataset_batch_size, max_steps)
                     # add a feature for dt
-                    batch_dt['observations'] = np.hstack([
-                        batch_dt['observations'],
-                        np.ones((per_dataset_batch_size, 1))*dt]).astype(np.float32)
-                    batch_dt['next_observations'] = np.hstack([
-                        batch_dt['next_observations'],
-                        np.ones((per_dataset_batch_size, 1))*dt]).astype(np.float32)
+                    dt_feat = np.ones((per_dataset_batch_size, max_steps, 1))*dt
+                    batch_dt['observations'] = np.concatenate([
+                        batch_dt['observations'], dt_feat], axis=2
+                    ).astype(np.float32)
+                    batch_dt['next_observations'] = np.concatenate([
+                        batch_dt['next_observations'], dt_feat], axis=2
+                    ).astype(np.float32)
                     batch_dts.append(batch_dt)
 
                 # create a batch which samples equally from each buffer
                 batch = {}
                 for k in batch_dts[0].keys():
-                    if 
-                    else:
-                        batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
+                    batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
                 n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
