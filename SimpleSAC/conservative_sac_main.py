@@ -47,6 +47,7 @@ FLAGS_DEF = define_flags_with_default(
     load_model='',
     visualize_traj=False,
     N_steps=.08,
+    dt_feat=True,
 
     cql=ConservativeSAC.get_default_config(),
     logging=WandBLogger.get_default_config(),
@@ -120,8 +121,12 @@ def main(argv):
         sac = loaded_model['sac']
         policy = sac.policy
     else:
+        if FLAGS.dt_feat:
+            obs_shape = eval_samplers[.01].env.observation_space.shape[0]+1
+        else:
+            obs_shape = eval_samplers[.01].env.observation_space.shape[0]
         policy = TanhGaussianPolicy(
-            eval_samplers[.01].env.observation_space.shape[0]+1,
+            obs_shape,
             eval_samplers[.01].env.action_space.shape[0],
             arch=FLAGS.policy_arch,
             log_std_multiplier=FLAGS.policy_log_std_multiplier,
@@ -130,7 +135,7 @@ def main(argv):
         )
 
         qf1 = FullyConnectedQFunction(
-            eval_samplers[.01].env.observation_space.shape[0]+1,
+            obs_shape,
             eval_samplers[.01].env.action_space.shape[0],
             arch=FLAGS.qf_arch,
             orthogonal_init=FLAGS.orthogonal_init,
@@ -138,7 +143,7 @@ def main(argv):
         target_qf1 = deepcopy(qf1)
 
         qf2 = FullyConnectedQFunction(
-            eval_samplers[.01].env.observation_space.shape[0]+1,
+            obs_shape,
             eval_samplers[.01].env.action_space.shape[0],
             arch=FLAGS.qf_arch,
             orthogonal_init=FLAGS.orthogonal_init,
@@ -167,14 +172,14 @@ def main(argv):
                 for dt in dts:
                     batch_dt = subsample_batch(
                         datasets[dt], per_dataset_batch_size, max_steps)
-                    # add a feature for dt
-                    dt_feat = np.ones((per_dataset_batch_size, max_steps, 1))*dt
-                    batch_dt['observations'] = np.concatenate([
-                        batch_dt['observations'], dt_feat], axis=2
-                    ).astype(np.float32)
-                    batch_dt['next_observations'] = np.concatenate([
-                        batch_dt['next_observations'], dt_feat], axis=2
-                    ).astype(np.float32)
+                    if FLAGS.dt_feat:
+                        dt_feat = np.ones((per_dataset_batch_size, max_steps, 1))*dt
+                        batch_dt['observations'] = np.concatenate([
+                            batch_dt['observations'], dt_feat], axis=2
+                        ).astype(np.float32)
+                        batch_dt['next_observations'] = np.concatenate([
+                            batch_dt['next_observations'], dt_feat], axis=2
+                        ).astype(np.float32)
                     batch_dts.append(batch_dt)
 
                 # create a batch which samples equally from each buffer
@@ -191,7 +196,8 @@ def main(argv):
                 if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
                     # my_seed = eval_sampler._env.seed(FLAGS.seed)
                     trajs = eval_sampler.sample(
-                        sampler_policy, FLAGS.eval_n_trajs, deterministic=True, video=FLAGS.visualize_traj
+                        sampler_policy, FLAGS.eval_n_trajs, FLAGS.dt_feat,
+                        deterministic=True, video=FLAGS.visualize_traj
                     )
 
                     if FLAGS.visualize_traj or epoch % 100 == 99:
@@ -206,7 +212,7 @@ def main(argv):
                         elif "pendulum_" in FLAGS.env:
                             generate_pendulum_visualization(
                                 sac.policy, sac.qf1, sac.qf2, wandb_logger,
-                                f'val_dt{dt}_epoch{epoch}.png', env.dt)
+                                f'val_dt{dt}_epoch{epoch}.png', FLAGS.dt_feat, env.dt)
 
                     metrics[f'average_return_{dt}'] = np.mean([np.sum(t['rewards']) for t in trajs])
                     metrics[f'average_traj_length_{dt}'] = np.mean([len(t['rewards']) for t in trajs])
