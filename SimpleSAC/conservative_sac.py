@@ -40,13 +40,14 @@ class ConservativeSAC(object):
             config.update(ConfigDict(updates).copy_and_resolve_references())
         return config
 
-    def __init__(self, config, policy, qf1, qf2, target_qf1, target_qf2):
+    def __init__(self, config, policy, qf1, qf2, target_qf1, target_qf2, update_target=True):
         self.config = ConservativeSAC.get_default_config(config)
         self.policy = policy
         self.qf1 = qf1
         self.qf2 = qf2
         self.target_qf1 = target_qf1
         self.target_qf2 = target_qf2
+        self.update_target = update_target
 
         optimizer_class = {
             'adam': torch.optim.Adam,
@@ -76,10 +77,12 @@ class ConservativeSAC(object):
                 lr=self.config.qf_lr,
             )
 
-        self.update_target_network(1.0)
+        if self.update_target:
+            self.update_target_network(1.0)
         self._total_steps = 0
 
     def update_target_network(self, soft_target_update_rate):
+        import pdb; pdb.set_trace()
         soft_target_update(self.qf1, self.target_qf1, soft_target_update_rate)
         soft_target_update(self.qf2, self.target_qf2, soft_target_update_rate)
 
@@ -221,7 +224,7 @@ class ConservativeSAC(object):
         qf_loss.backward()
         self.qf_optimizer.step()
 
-        if self.total_steps % self.config.target_update_period == 0:
+        if self.total_steps % self.config.target_update_period == 0 and self.update_target:
             self.update_target_network(
                 self.config.soft_target_update_rate
             )

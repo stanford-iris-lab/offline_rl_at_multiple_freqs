@@ -48,6 +48,7 @@ FLAGS_DEF = define_flags_with_default(
     visualize_traj=False,
     N_steps=.08,
     dt_feat=True,
+    use_pretrained_q_target=True,
 
     cql=ConservativeSAC.get_default_config(),
     logging=WandBLogger.get_default_config(),
@@ -140,7 +141,6 @@ def main(argv):
             arch=FLAGS.qf_arch,
             orthogonal_init=FLAGS.orthogonal_init,
         )
-        target_qf1 = deepcopy(qf1)
 
         qf2 = FullyConnectedQFunction(
             obs_shape,
@@ -148,12 +148,23 @@ def main(argv):
             arch=FLAGS.qf_arch,
             orthogonal_init=FLAGS.orthogonal_init,
         )
-        target_qf2 = deepcopy(qf2)
+
+        if FLAGS.use_pretrained_q_target:
+            pretrained_target_path = '/iris/u/kayburns/continuous-rl/CQL/experiments/mix_nstep/2784f0faf3014c6c89ffea3e62408680/'
+            loaded_model = wandb_logger.load_pickle(pretrained_target_path)
+            print(f"Loaded model from epoch {loaded_model['epoch']}")
+            sac = loaded_model['sac']
+            target_qf1 = sac.target_qf1
+            target_qf2 = sac.target_qf2
+        else:
+            target_qf1 = deepcopy(qf1)
+            target_qf2 = deepcopy(qf2)
 
         if FLAGS.cql.target_entropy >= 0.0:
             FLAGS.cql.target_entropy = -np.prod(eval_samplers[.01].env.action_space.shape).item()
 
-        sac = ConservativeSAC(FLAGS.cql, policy, qf1, qf2, target_qf1, target_qf2)
+        update_target = not FLAGS.use_pretrained_q_target
+        sac = ConservativeSAC(FLAGS.cql, policy, qf1, qf2, target_qf1, target_qf2, update_target=update_target)
     sac.torch_to_device(FLAGS.device)
 
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
@@ -190,7 +201,7 @@ def main(argv):
                 n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # change dt past nsteps to .04
-                # batch['observations'][:,(n_steps-1).long(),-1] = .04
+                batch['observations'][:,(n_steps-1).long(),-1] = .04
                 metrics.update(prefix_metrics(sac.train(batch, n_steps), 'sac'))
 
         with Timer() as eval_timer:
