@@ -224,10 +224,10 @@ def generate_pendulum_visualization(policy, qf1, qf2, logger, filename, dt_feat,
     values = qf1(observation, actions).reshape(target_shape).squeeze()
 
     # normalize values and visualize with plasma colormap
-    values = (values - values.mean()) / values.std()
+    # values = (values - values.mean()) / values.std()
     # for pendulum consistency
-    # max_R = 10000
-    # values = (values - (max_R/2)) / (max_R/2)
+    max_R = 10000
+    values = (values - (max_R/2)) / (max_R/2)
     vis_values = th_to_arr(values)
     vis_values = plt.get_cmap("plasma")(vis_values)
     logger.save_image(vis_values, filename)

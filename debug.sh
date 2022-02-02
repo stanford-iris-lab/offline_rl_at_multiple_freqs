@@ -14,7 +14,7 @@ python -m SimpleSAC.conservative_sac_main \
   --logging.output_dir "./debug/" \
   --cql.buffer_file "mix_pendulum" \
   --n_epochs 1 \
-  --n_train_step_per_epoch 10 \
+  --n_train_step_per_epoch 1 \
   --device 'cuda' 
   # --load_model 'debug/b77da20b7bf844ce9cfb9893a02e754e/'
 

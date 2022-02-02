@@ -48,7 +48,9 @@ FLAGS_DEF = define_flags_with_default(
     visualize_traj=False,
     N_steps=.08,
     dt_feat=True,
-    use_pretrained_q_target=True,
+    use_pretrained_q_target=False,
+    pretrained_target_path='',
+    # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.04/ab4cbd6bf9274fa58305408b92713801/',
 
     cql=ConservativeSAC.get_default_config(),
     logging=WandBLogger.get_default_config(),
@@ -150,8 +152,8 @@ def main(argv):
         )
 
         if FLAGS.use_pretrained_q_target:
-            pretrained_target_path = '/iris/u/kayburns/continuous-rl/CQL/experiments/mix_nstep/2784f0faf3014c6c89ffea3e62408680/'
-            loaded_model = wandb_logger.load_pickle(pretrained_target_path)
+            # pretrained_target_path = '/iris/u/kayburns/continuous-rl/CQL/experiments/pendulum/mix_pcond/ad794d1af211434f9cab06cfd0784b5f/'
+            loaded_model = wandb_logger.load_pickle(FLAGS.pretrained_target_path)
             print(f"Loaded model from epoch {loaded_model['epoch']}")
             sac = loaded_model['sac']
             target_qf1 = sac.target_qf1
@@ -201,7 +203,8 @@ def main(argv):
                 n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # change dt past nsteps to .04
-                batch['observations'][:,(n_steps-1).long(),-1] = .04
+                # TODO weird: this is replicating the same indexing per_dataset_batch_size times
+                # batch['observations'][:,(n_steps-1).long(),-1] = .04
                 metrics.update(prefix_metrics(sac.train(batch, n_steps), 'sac'))
 
         with Timer() as eval_timer:

@@ -82,7 +82,6 @@ class ConservativeSAC(object):
         self._total_steps = 0
 
     def update_target_network(self, soft_target_update_rate):
-        import pdb; pdb.set_trace()
         soft_target_update(self.qf1, self.target_qf1, soft_target_update_rate)
         soft_target_update(self.qf2, self.target_qf2, soft_target_update_rate)
 
@@ -114,14 +113,21 @@ class ConservativeSAC(object):
         next_idx = np.vstack(
             (np.arange(observations.shape[0]), (n_steps-1).long()))
         """ Q function loss """
+        import pdb; pdb.set_trace()
         q1_pred = self.qf1(observations[next_idx], actions[next_idx])
         q2_pred = self.qf2(observations[next_idx], actions[next_idx])
 
         new_next_actions, next_log_pi = self.policy(next_observations[next_idx])
-        target_q_values = torch.min(
-            self.target_qf1(next_observations[next_idx], new_next_actions),
-            self.target_qf2(next_observations[next_idx], new_next_actions),
-        )
+        if self.update_target: 
+            target_q_values = torch.min(
+                self.target_qf1(next_observations[next_idx], new_next_actions),
+                self.target_qf2(next_observations[next_idx], new_next_actions),
+            )
+        else:
+            target_q_values = torch.min(
+                self.target_qf1(next_observations[next_idx][:,:-1], new_next_actions),
+                self.target_qf2(next_observations[next_idx][:,:-1], new_next_actions),
+            )
 
         if self.config.backup_entropy:
             target_q_values = target_q_values - alpha * next_log_pi
@@ -134,7 +140,7 @@ class ConservativeSAC(object):
         pre_mask = torch.repeat_interleave(torch.arange(max_n), batch_size).reshape((-1, batch_size)).T # :(
         mask = (pre_mask <= (n_steps - 1).reshape(-1, 1)).cuda()
         summed_reward = torch.sum(rewards.squeeze()*discounts*mask, axis=1)
-        q_target = summed_reward + (1. - dones[next_idx]).squeeze() * (self.config.discount**n_steps-1).cuda() * target_q_values
+        q_target = summed_reward + (1. - dones[next_idx]).squeeze() * (self.config.discount**(n_steps-1)).cuda() * target_q_values
         qf1_loss = F.mse_loss(q1_pred, q_target.detach())
         qf2_loss = F.mse_loss(q2_pred, q_target.detach())
 
