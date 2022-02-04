@@ -204,7 +204,7 @@ def main(argv):
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # change dt past nsteps to .04
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
-                # batch['observations'][:,(n_steps-1).long(),-1] = .04
+                batch['observations'][:,(n_steps-1).long(),-1] = .04
                 metrics.update(prefix_metrics(sac.train(batch, n_steps), 'sac'))
 
         with Timer() as eval_timer:
