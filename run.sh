@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=iris-hi
-#SBATCH --nodelist=iris5
+#SBATCH --exclude=iris-hp-z8
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --job-name="cql"

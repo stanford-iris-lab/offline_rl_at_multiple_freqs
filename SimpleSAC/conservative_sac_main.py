@@ -50,6 +50,7 @@ FLAGS_DEF = define_flags_with_default(
     dt_feat=True,
     use_pretrained_q_target=False,
     pretrained_target_path='',
+    shared_q_target=False,
     # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.04/ab4cbd6bf9274fa58305408b92713801/',
 
     cql=ConservativeSAC.get_default_config(),
@@ -74,19 +75,16 @@ def main(argv):
 
     if "walker_" in FLAGS.env:
         eval_samplers = {}
-        eval_samplers[.04] = TrajSampler(Walker(.04))
+        eval_samplers[.005] = TrajSampler(Walker(.005))
         eval_samplers[.02] = TrajSampler(Walker(.02))
         eval_samplers[.01] = TrajSampler(Walker(.01))
-        # eval_samplers[.04] = TrajSampler(Walker(.04), int(100 * (1/.04)))
+        # eval_samplers[.005] = TrajSampler(Walker(.005), int(100 * (1/.005)))
         # eval_samplers[.02] = TrajSampler(Walker(.02), int(100 * (1/.02)))
         # eval_samplers[.01] = TrajSampler(Walker(.01), int(100 * (1/.01)))
 
         datasets = {}
-        for dt in [.01, .02, .04]:
-            if dt == .04:
-                dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/half_buffer_{str(dt)[1:]}/data0.h5py")
-            else:
-                dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py")
+        for dt in [.01, .02, .005]:
+            dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py")
             dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
             datasets[dt] = dataset
 
@@ -105,7 +103,7 @@ def main(argv):
         env.dt = dt
 
         datasets, eval_samplers = {}, {}
-        for dt in [.01, .02, .04]:
+        for dt in [.01, .02, .005]:
             env = gym.make('Pendulum-v1').unwrapped
             env.dt = dt
             eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), FLAGS.max_traj_length)
@@ -172,7 +170,7 @@ def main(argv):
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
 
     viskit_metrics = {}
-    dts = [.01, .02, .04]
+    dts = [.01, .02, .005]
     for epoch in range(FLAGS.n_epochs):
         metrics = {'epoch': epoch}
 
@@ -202,9 +200,9 @@ def main(argv):
                 batch = batch_to_torch(batch, FLAGS.device)
                 n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
-                # change dt past nsteps to .04
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
-                batch['observations'][:,(n_steps-1).long(),-1] = .04
+                if FLAGS.shared_q_target:
+                    batch['next_observations'][:,(n_steps-1).long(),-1] = .02
                 metrics.update(prefix_metrics(sac.train(batch, n_steps), 'sac'))
 
         with Timer() as eval_timer:
