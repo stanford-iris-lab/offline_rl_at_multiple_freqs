@@ -104,7 +104,8 @@ class TrajSampler(object):
                 dones.append(done)
                 next_observations.append(next_observation)
                 if video:
-                    imgs.append(self.env.render(mode='rgb_array'))
+                    imgs.append(self.env.render(offscreen=True))
+                    # imgs.append(self.env.render(mode='rgb_array'))
 
                 if replay_buffer is not None:
                     replay_buffer.add_sample(
