@@ -51,7 +51,9 @@ FLAGS_DEF = define_flags_with_default(
     use_pretrained_q_target=False,
     pretrained_target_path='',
     shared_q_target=False,
-    # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.04/ab4cbd6bf9274fa58305408b92713801/',
+    # use_pretrained_q_target=True,
+    # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.02/aec001f95d094fa598456707e8c81814/',
+    # shared_q_target=True,
 
     cql=ConservativeSAC.get_default_config(),
     logging=WandBLogger.get_default_config(),
@@ -226,7 +228,7 @@ def main(argv):
                         elif "pendulum_" in FLAGS.env:
                             generate_pendulum_visualization(
                                 sac.policy, sac.qf1, sac.qf2, wandb_logger,
-                                f'val_dt{dt}_epoch{epoch}.png', FLAGS.dt_feat, env.dt)
+                                f'val_dt{dt}_epoch{epoch}.png', FLAGS.dt_feat, dt)
 
                     metrics[f'average_return_{dt}'] = np.mean([np.sum(t['rewards']) for t in trajs])
                     metrics[f'average_traj_length_{dt}'] = np.mean([len(t['rewards']) for t in trajs])
