@@ -13,8 +13,11 @@ Xvfb :0 &
 MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.sac_main \
   --logging.output_dir "./debug/" \
   --n_epochs 1 \
+  --dt 10 \
+  --env "drawer-open-v2-goal-observable" \
   --n_train_step_per_epoch 10 \
-  --device 'cuda' 
+  --device 'cuda' \
+  --save_model True 
   # --load_model 'debug/b77da20b7bf844ce9cfb9893a02e754e/'
 # python -m SimpleSAC.conservative_sac_main \
 #   --env "walker_.01" \

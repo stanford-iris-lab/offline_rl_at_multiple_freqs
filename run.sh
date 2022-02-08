@@ -28,10 +28,14 @@ Xvfb :0 &
 #   --device 'cuda' \
 #   --save_model True
 MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.sac_main \
-  --logging.output_dir "./experiments/collect/door/" \
+  --logging.output_dir "./experiments/collect/${1}/" \
   --logging.online True \
-  --env 'door-open-v2-goal-observable' \
-  --device 'cuda' 
+  --env ${1} \
+  --dt ${4} \
+  --sac.policy_lr ${2} \
+  --seed ${3} \
+  --device 'cuda' \
+  --save_model True
 
 # 0.001: 5 1e-4 3e-4 .001 .9999
 # 0.01: 5 1e-4 3e-4 .01 .999

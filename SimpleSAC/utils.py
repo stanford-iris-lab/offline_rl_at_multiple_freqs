@@ -17,6 +17,8 @@ from ml_collections import ConfigDict
 from ml_collections.config_flags import config_flags
 from ml_collections.config_dict import config_dict
 
+from moviepy.editor import ImageSequenceClip
+
 import wandb
 
 import torch
@@ -229,4 +231,13 @@ def generate_pendulum_visualization(policy, qf1, qf2, logger, filename, dt=.02):
     vis_values = th_to_arr(values)
     vis_values = plt.get_cmap("plasma")(vis_values)
     logger.save_image(vis_values, filename)
-    
+
+
+def vid_from_frames(imgs, output_file):
+    imgs = [img.squeeze() for img in np.split(imgs, imgs.shape[0])]
+    clip = ImageSequenceClip(imgs, fps=50)
+    if output_file.endswith('.gif'):
+        clip.write_gif(output_file)
+    if output_file.endswith('.mp4'):
+        clip.write_videofile(output_file)
+

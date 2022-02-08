@@ -30,13 +30,14 @@ FLAGS_DEF = define_flags_with_default(
     seed=42,
     device='cpu',
     save_model=False,
+    dt=5,
 
     policy_arch='256-256',
     qf_arch='256-256',
     policy_log_std_multiplier=1.0,
     policy_log_std_offset=-1.0,
 
-    n_epochs=2000,
+    n_epochs=500,
     n_env_steps_per_epoch=1000,
     n_train_step_per_epoch=1000,
     eval_period=10,
@@ -65,8 +66,12 @@ def main(argv):
     set_random_seed(FLAGS.seed)
 
     if 'goal-observable' in FLAGS.env:
-        train_env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env]()
-        test_env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env]()
+        train_env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env](seed=FLAGS.seed-1)
+        train_env.frame_skip = FLAGS.dt
+        test_env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env](seed=FLAGS.seed)
+        test_env.frame_skip = FLAGS.dt
+        assert train_env.dt == FLAGS.dt * .0025
+        assert test_env.dt == FLAGS.dt * .0025
         train_sampler = StepSampler(train_env.unwrapped, FLAGS.max_traj_length)
         eval_sampler = TrajSampler(test_env.unwrapped, FLAGS.max_traj_length)
     else:
@@ -128,8 +133,11 @@ def main(argv):
 
         with Timer() as eval_timer:
             if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
+                video = epoch == 0 or (epoch + 1) % (FLAGS.eval_period * 10) == 0
+                output_file = os.path.join(wandb_logger.config.output_dir, f'eval_{epoch}.gif')
                 trajs = eval_sampler.sample(
-                    sampler_policy, FLAGS.eval_n_trajs, deterministic=True, video=False
+                    sampler_policy, FLAGS.eval_n_trajs, deterministic=True,
+                    video=video, output_file=output_file
                 )
 
                 metrics['average_return'] = np.mean([np.sum(t['rewards']) for t in trajs])

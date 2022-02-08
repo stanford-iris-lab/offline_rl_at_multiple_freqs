@@ -1,5 +1,6 @@
 import numpy as np
 
+from .utils import vid_from_frames
 
 class StepSampler(object):
 
@@ -59,15 +60,15 @@ class TrajSampler(object):
         self.max_traj_length = max_traj_length
         self._env = env
 
-    def sample(self, policy, n_trajs, deterministic=False, replay_buffer=None, video=False):
+    def sample(self, policy, n_trajs, deterministic=False, replay_buffer=None, video=False, output_file=''):
         trajs = []
-        for _ in range(n_trajs):
+        for traj in range(n_trajs):
             observations = []
             actions = []
             rewards = []
             next_observations = []
             dones = []
-            if video:
+            if video and traj == 0:
                 imgs = []
 
             observation = self.env.reset()
@@ -103,7 +104,7 @@ class TrajSampler(object):
                 rewards.append(reward)
                 dones.append(done)
                 next_observations.append(next_observation)
-                if video:
+                if video and traj == 0:
                     imgs.append(self.env.render(offscreen=True))
                     # imgs.append(self.env.render(mode='rgb_array'))
 
@@ -128,9 +129,9 @@ class TrajSampler(object):
                 next_observations=np.array(next_observations, dtype=np.float32),
                 dones=np.array(dones, dtype=np.float32),
             ))
-            if video:
+            if video and traj == 0:
                 imgs = np.stack(imgs, axis=0)
-                np.savez('movie.npz', imgs)
+                vid_from_frames(imgs, output_file)
 
         return trajs
 
