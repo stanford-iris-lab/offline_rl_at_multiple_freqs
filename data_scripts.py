@@ -9,11 +9,27 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     '--buffer_file',
     type=str,
-    default='/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/half_buffer_0_.02/data0.h5py')
+    default="/iris/u/kayburns/continuous-rl/CQL/experiments/collect/door-open-v2-goal-observable/b6842bc3810641f6868fb42a242fe059/buffer.h5py")
 args = parser.parse_args()
 
 import pdb; pdb.set_trace()
 
+
+###### compute success rate
+dataset = load_dataset(args.buffer_file)
+for k, v in dataset.items():
+    dataset[k] = v[:500000]
+dones = dataset['dones'].astype(int)
+success = dataset['rewards'] == 5.0
+sum_success = np.cumsum(success)
+sum_after_episode = sum_success[dones]
+num_successful_runs = sum_after_episode[1:] - sum_after_episode[:-1] + 1
+print(f"{num_successful_runs} / {success.shape[0]} runs successful: {num_successful_runs/success.shape[0]}")
+sum_success[dones] - sum_success[:-1]
+
+
+
+###### compute avg reward
 dataset = load_dataset(args.buffer_file)
 rewards = dataset['rewards']
 dones = dataset['dones']
@@ -27,8 +43,9 @@ for idx in episode_end_idxs:
     idx += 1
     avg_reward += rewards[prev_idx:idx].sum() / num_episodes
     prev_idx = idx
-print(avg_reward) 
+# print(avg_reward) 
 
+###### view video
 # imgs = np.load(args.npz_file)['arr_0']
 # imgs = [img.squeeze() for img in np.split(imgs, imgs.shape[0])]
 # clip = ImageSequenceClip(imgs, fps=args.fps)

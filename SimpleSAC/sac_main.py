@@ -70,8 +70,8 @@ def main(argv):
         train_env.frame_skip = FLAGS.dt
         test_env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env](seed=FLAGS.seed)
         test_env.frame_skip = FLAGS.dt
-        assert train_env.dt == FLAGS.dt * .0025
-        assert test_env.dt == FLAGS.dt * .0025
+        assert train_env.dt == FLAGS.dt * .00125
+        assert test_env.dt == FLAGS.dt * .00125
         train_sampler = StepSampler(train_env.unwrapped, FLAGS.max_traj_length)
         eval_sampler = TrajSampler(test_env.unwrapped, FLAGS.max_traj_length)
     else:
@@ -115,7 +115,7 @@ def main(argv):
         metrics = {}
         with Timer() as rollout_timer:
             train_sampler.sample(
-                sampler_policy, FLAGS.n_env_steps_per_epoch,
+                sampler_policy, FLAGS.n_env_steps_per_epoch, fs=FLAGS.dt,
                 deterministic=False, replay_buffer=replay_buffer
             )
             metrics['env_steps'] = replay_buffer.total_steps
@@ -136,12 +136,15 @@ def main(argv):
                 video = epoch == 0 or (epoch + 1) % (FLAGS.eval_period * 10) == 0
                 output_file = os.path.join(wandb_logger.config.output_dir, f'eval_{epoch}.gif')
                 trajs = eval_sampler.sample(
-                    sampler_policy, FLAGS.eval_n_trajs, deterministic=True,
+                    sampler_policy, FLAGS.eval_n_trajs, deterministic=True, fs=FLAGS.dt,
                     video=video, output_file=output_file
                 )
 
                 metrics['average_return'] = np.mean([np.sum(t['rewards']) for t in trajs])
                 metrics['average_traj_length'] = np.mean([len(t['rewards']) for t in trajs])
+                if 'goal-observable' in FLAGS.env:
+                    metrics['max_success'] = np.mean([np.max(t['successes']) for t in trajs])
+                    metrics['final_state_success'] = np.mean([t['successes'][-1] for t in trajs])
 
                 if FLAGS.save_model:
                     save_data = {'sac': sac, 'variant': variant, 'epoch': epoch}
