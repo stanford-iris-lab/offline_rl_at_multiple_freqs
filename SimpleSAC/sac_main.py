@@ -20,21 +20,24 @@ from .utils import Timer, define_flags_with_default, set_random_seed, print_flag
 from .utils import WandBLogger
 from viskit.logging import logger, setup_logger
 
+from metaworld.envs import ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE
+
 
 FLAGS_DEF = define_flags_with_default(
-    env='HalfCheetah-v2',
-    max_traj_length=1000,
+    env='door-open-v2-goal-observable', # 'drawer-open-v2-goal-observable',
+    max_traj_length=500,
     replay_buffer_size=1000000,
     seed=42,
     device='cpu',
     save_model=False,
+    dt=5,
 
     policy_arch='256-256',
     qf_arch='256-256',
     policy_log_std_multiplier=1.0,
     policy_log_std_offset=-1.0,
 
-    n_epochs=2000,
+    n_epochs=500,
     n_env_steps_per_epoch=1000,
     n_train_step_per_epoch=1000,
     eval_period=10,
@@ -62,8 +65,18 @@ def main(argv):
 
     set_random_seed(FLAGS.seed)
 
-    train_sampler = StepSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)
-    eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)
+    if 'goal-observable' in FLAGS.env:
+        train_env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env](seed=FLAGS.seed-1)
+        train_env.frame_skip = FLAGS.dt
+        test_env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env](seed=FLAGS.seed)
+        test_env.frame_skip = FLAGS.dt
+        assert train_env.dt == FLAGS.dt * .00125
+        assert test_env.dt == FLAGS.dt * .00125
+        train_sampler = StepSampler(train_env.unwrapped, FLAGS.max_traj_length)
+        eval_sampler = TrajSampler(test_env.unwrapped, FLAGS.max_traj_length)
+    else:
+        train_sampler = StepSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)
+        eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)
 
     replay_buffer = ReplayBuffer(FLAGS.replay_buffer_size)
 
@@ -102,7 +115,7 @@ def main(argv):
         metrics = {}
         with Timer() as rollout_timer:
             train_sampler.sample(
-                sampler_policy, FLAGS.n_env_steps_per_epoch,
+                sampler_policy, FLAGS.n_env_steps_per_epoch, fs=FLAGS.dt,
                 deterministic=False, replay_buffer=replay_buffer
             )
             metrics['env_steps'] = replay_buffer.total_steps
@@ -120,12 +133,18 @@ def main(argv):
 
         with Timer() as eval_timer:
             if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
+                video = epoch == 0 or (epoch + 1) % (FLAGS.eval_period * 10) == 0
+                output_file = os.path.join(wandb_logger.config.output_dir, f'eval_{epoch}.gif')
                 trajs = eval_sampler.sample(
-                    sampler_policy, FLAGS.eval_n_trajs, deterministic=True
+                    sampler_policy, FLAGS.eval_n_trajs, deterministic=True, fs=FLAGS.dt,
+                    video=video, output_file=output_file
                 )
 
                 metrics['average_return'] = np.mean([np.sum(t['rewards']) for t in trajs])
                 metrics['average_traj_length'] = np.mean([len(t['rewards']) for t in trajs])
+                if 'goal-observable' in FLAGS.env:
+                    metrics['max_success'] = np.mean([np.max(t['successes']) for t in trajs])
+                    metrics['final_state_success'] = np.mean([t['successes'][-1] for t in trajs])
 
                 if FLAGS.save_model:
                     save_data = {'sac': sac, 'variant': variant, 'epoch': epoch}
@@ -143,6 +162,7 @@ def main(argv):
     if FLAGS.save_model:
         save_data = {'sac': sac, 'variant': variant, 'epoch': epoch}
         wandb_logger.save_pickle(save_data, 'model.pkl')
+        replay_buffer.store(os.path.join(wandb_logger.config.output_dir, 'buffer.h5py'))
 
 
 if __name__ == '__main__':

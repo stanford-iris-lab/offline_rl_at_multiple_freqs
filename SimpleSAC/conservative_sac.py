@@ -123,6 +123,7 @@ class ConservativeSAC(object):
                 self.target_qf2(next_observations[next_idx], new_next_actions),
             )
         else:
+            # our target q-value doesn't use dt_feat
             target_q_values = torch.min(
                 self.target_qf1(next_observations[next_idx][:,:-1], new_next_actions),
                 self.target_qf2(next_observations[next_idx][:,:-1], new_next_actions),
@@ -187,7 +188,7 @@ class ConservativeSAC(object):
                      cql_q2_current_actions - cql_current_log_pis.detach()],
                     dim=1
                 )
-
+            
             cql_min_qf1_loss = torch.logsumexp(cql_cat_q1 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
             cql_min_qf2_loss = torch.logsumexp(cql_cat_q2 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
 

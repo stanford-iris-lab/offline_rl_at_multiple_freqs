@@ -75,6 +75,16 @@ class ReplayBuffer(object):
             dones=self._dones[indices, ...],
         )
 
+    def store(self, h5path):
+        """Stores buffer data as an h5py file."""
+        dataset_file = h5py.File(h5path, "w")
+        dataset_file.create_dataset("obs", data=self._observations)
+        dataset_file.create_dataset("actions", data=self._actions)
+        dataset_file.create_dataset("next_obs", data=self._next_observations)
+        dataset_file.create_dataset("rewards", data=self._rewards)
+        dataset_file.create_dataset("dones", data=self._dones)
+        dataset_file.close()
+    
     def generator(self, batch_size, n_batchs=None):
         i = 0
         while n_batchs is None or i < n_batchs:
@@ -127,7 +137,9 @@ def load_dataset(h5path):
             dim_obs = v.shape[1]
         else:
             dim_obs = 1
-        dataset[k] = v.reshape(-1, 256, dim_obs) # this only works for pendulum
+        v = v[:500000]
+        dataset[k] = v.reshape(500, 1000, dim_obs) # this only works for mujoco
+        # v.reshape(-1, 256, dim_obs) # this only works for pendulum
     return dataset
 
 

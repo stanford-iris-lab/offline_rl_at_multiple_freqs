@@ -21,7 +21,7 @@ from .utils import *
 from viskit.logging import logger, setup_logger
 from dau.code.envs.biped import Walker
 from dau.code.envs.wrappers import WrapContinuousPendulumSparse
-
+from metaworld.envs import ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE
 
 FLAGS_DEF = define_flags_with_default(
     env='halfcheetah-medium-v2',
@@ -30,6 +30,7 @@ FLAGS_DEF = define_flags_with_default(
     device='cpu',
     save_model=False,
     batch_size=256,
+    sparse=True,
 
     reward_scale=1.0,
     reward_bias=0.0,
@@ -46,11 +47,12 @@ FLAGS_DEF = define_flags_with_default(
     eval_n_trajs=5,
     load_model='',
     visualize_traj=False,
-    N_steps=.08,
+    N_steps=10,
+    # N_steps=.08,
     dt_feat=True,
     use_pretrained_q_target=False,
     pretrained_target_path='',
-    shared_q_target=False,
+    # shared_q_target=False,
     # use_pretrained_q_target=True,
     # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.02/aec001f95d094fa598456707e8c81814/',
     # shared_q_target=True,
@@ -113,10 +115,33 @@ def main(argv):
             dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py")
             dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
             datasets[dt] = dataset
+    elif "goal-observable" in FLAGS.env:
+        # find correct buffer file
+        buffers = {
+            1: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/door-open-v2-goal-observable/f87d142ac7e54d659d999cba3e5e5421/buffer.h5py",
+            2: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/door-open-v2-goal-observable/8690f0c73f7a4b94b1c7dbc3330174eb/buffer.h5py",
+            5: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/door-open-v2-goal-observable/67fa1c8c44a94062b7b6d1a8914d176a/buffer.h5py",
+            10: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/door-open-v2-goal-observable/b6842bc3810641f6868fb42a242fe059/buffer.h5py"
+        }
+        datasets, eval_samplers = {}, {}
+
+        for dt in [1, 2, 5, 10]:
+            # load environment
+            env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env](seed=FLAGS.seed)
+            env.frame_skip = dt
+            assert env.dt == dt * .00125
+            eval_samplers[dt] = TrajSampler(env, FLAGS.max_traj_length)
+
+            # fetch dataset
+            dataset = load_dataset(buffers[dt])
+            if FLAGS.sparse:
+                dataset['rewards'] = (dataset['rewards'] == 10.0 * (dt/10)).astype('float32')
+            datasets[dt] = dataset
+            
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
-    #dataset = load_dataset(FLAGS.cql.buffer_file) # TODO
-    #dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
+
+    # dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
 
     if FLAGS.load_model:
         loaded_model = wandb_logger.load_pickle(FLAGS.load_model)
@@ -125,12 +150,14 @@ def main(argv):
         policy = sac.policy
     else:
         if FLAGS.dt_feat:
-            obs_shape = eval_samplers[.01].env.observation_space.shape[0]+1
+            obs_shape = list(eval_samplers.values())[0].env.observation_space.shape[0]+1
         else:
-            obs_shape = eval_samplers[.01].env.observation_space.shape[0]
+            obs_shape = list(eval_samplers.values())[0].env.observation_space.shape[0]
+        action_shape = list(eval_samplers.values())[0].env.action_space.shape
+
         policy = TanhGaussianPolicy(
             obs_shape,
-            eval_samplers[.01].env.action_space.shape[0],
+            action_shape[0],
             arch=FLAGS.policy_arch,
             log_std_multiplier=FLAGS.policy_log_std_multiplier,
             log_std_offset=FLAGS.policy_log_std_offset,
@@ -139,14 +166,14 @@ def main(argv):
 
         qf1 = FullyConnectedQFunction(
             obs_shape,
-            eval_samplers[.01].env.action_space.shape[0],
+            action_shape[0],
             arch=FLAGS.qf_arch,
             orthogonal_init=FLAGS.orthogonal_init,
         )
 
         qf2 = FullyConnectedQFunction(
             obs_shape,
-            eval_samplers[.01].env.action_space.shape[0],
+            action_shape[0],
             arch=FLAGS.qf_arch,
             orthogonal_init=FLAGS.orthogonal_init,
         )
@@ -163,7 +190,7 @@ def main(argv):
             target_qf2 = deepcopy(qf2)
 
         if FLAGS.cql.target_entropy >= 0.0:
-            FLAGS.cql.target_entropy = -np.prod(eval_samplers[.01].env.action_space.shape).item()
+            FLAGS.cql.target_entropy = -np.prod(action_shape).item()
 
         update_target = not FLAGS.use_pretrained_q_target
         sac = ConservativeSAC(FLAGS.cql, policy, qf1, qf2, target_qf1, target_qf2, update_target=update_target)
@@ -172,7 +199,8 @@ def main(argv):
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
 
     viskit_metrics = {}
-    dts = [.01, .02, .005]
+    # dts = [.01, .02, .005]
+    dts = [1, 2, 5, 10]
     for epoch in range(FLAGS.n_epochs):
         metrics = {'epoch': epoch}
 
@@ -203,17 +231,21 @@ def main(argv):
                 n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
-                if FLAGS.shared_q_target:
-                    batch['next_observations'][:,(n_steps-1).long(),-1] = .02
+                # if FLAGS.shared_q_target:
+                #     batch['next_observations'][:,(n_steps-1).long(),-1] = .02
                 metrics.update(prefix_metrics(sac.train(batch, n_steps), 'sac'))
 
         with Timer() as eval_timer:
             for dt, eval_sampler in eval_samplers.items():
                 if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
                     # my_seed = eval_sampler._env.seed(FLAGS.seed)
+                    video = epoch == 0 or (epoch + 1) % (FLAGS.eval_period * 10) == 0
+                    output_file = os.path.join(
+                        wandb_logger.config.output_dir, f'eval_{epoch}.gif')
+
                     trajs = eval_sampler.sample(
                         sampler_policy, FLAGS.eval_n_trajs, FLAGS.dt_feat,
-                        deterministic=True, video=FLAGS.visualize_traj
+                        deterministic=True, video=video, output_file=output_file
                     )
 
                     if FLAGS.visualize_traj or epoch % 100 == 99:
@@ -230,11 +262,11 @@ def main(argv):
                                 sac.policy, sac.qf1, sac.qf2, wandb_logger,
                                 f'val_dt{dt}_epoch{epoch}.png', FLAGS.dt_feat, dt)
 
+                    if "goal-observable" in FLAGS.env:
+                        metrics['max_success'] = np.mean([np.max(t['successes']) for t in trajs])
+                        metrics['final_state_success'] = np.mean([t['successes'][-1] for t in trajs])
                     metrics[f'average_return_{dt}'] = np.mean([np.sum(t['rewards']) for t in trajs])
                     metrics[f'average_traj_length_{dt}'] = np.mean([len(t['rewards']) for t in trajs])
-                    # metrics['average_normalizd_return'] = np.mean(
-                    #     [eval_sampler.env.get_normalized_score(np.sum(t['rewards'])) for t in trajs]
-                    # ) # TODO
                     if FLAGS.save_model:
                         save_data = {'sac': sac, 'variant': variant, 'epoch': epoch}
                         wandb_logger.save_pickle(save_data, 'model.pkl')

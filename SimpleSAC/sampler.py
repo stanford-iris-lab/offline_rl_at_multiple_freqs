@@ -1,5 +1,6 @@
 import numpy as np
 
+from .utils import vid_from_frames
 
 class StepSampler(object):
 
@@ -23,6 +24,7 @@ class StepSampler(object):
                 np.expand_dims(observation, 0), deterministic=deterministic
             )[0, :]
             next_observation, reward, done, _ = self.env.step(action)
+            # reward = reward * (fs/10)
             observations.append(observation)
             actions.append(action)
             rewards.append(reward)
@@ -59,15 +61,16 @@ class TrajSampler(object):
         self.max_traj_length = max_traj_length
         self._env = env
 
-    def sample(self, policy, n_trajs, dt_feat, deterministic=False, replay_buffer=None, video=False):
+    def sample(self, policy, n_trajs, dt_feat, deterministic=False, replay_buffer=None, video=False, output_file=''):
         trajs = []
-        for _ in range(n_trajs):
+        for traj in range(n_trajs):
             observations = []
             actions = []
             rewards = []
             next_observations = []
             dones = []
-            if video:
+            successes = []
+            if video and traj == 0:
                 imgs = []
 
             observation = self.env.reset()
@@ -97,14 +100,16 @@ class TrajSampler(object):
                 # else:
                 #     action = action
                 #     print(action, _)
-                next_observation, reward, done, _ = self.env.step(action)
+                next_observation, reward, done, info = self.env.step(action)
                 observations.append(observation)
                 actions.append(action)
                 rewards.append(reward)
                 dones.append(done)
+                successes.append(info['success'])
                 next_observations.append(next_observation)
-                if video:
-                    imgs.append(self.env.render(mode='rgb_array'))
+                if video and traj == 0:
+                    imgs.append(self.env.render(offscreen=True))
+                    # imgs.append(self.env.render(mode='rgb_array'))
 
                 if replay_buffer is not None:
                     replay_buffer.add_sample(
@@ -126,10 +131,11 @@ class TrajSampler(object):
                 rewards=np.array(rewards, dtype=np.float32),
                 next_observations=np.array(next_observations, dtype=np.float32),
                 dones=np.array(dones, dtype=np.float32),
+                successes=np.array(successes, dtype=np.float32),
             ))
-            if video:
+            if video and traj == 0:
                 imgs = np.stack(imgs, axis=0)
-                np.savez('movie.npz', imgs)
+                vid_from_frames(imgs, output_file)
 
         return trajs
 
