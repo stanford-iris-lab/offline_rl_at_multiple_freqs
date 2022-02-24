@@ -14,7 +14,7 @@ import absl.app
 import absl.flags
 
 from .conservative_sac import ConservativeSAC
-from .replay_buffer import batch_to_torch, subsample_batch, load_dataset
+from .replay_buffer import batch_to_torch, subsample_batch_n, load_dataset
 from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
 from .sampler import StepSampler, TrajSampler
 from .utils import *
@@ -49,7 +49,7 @@ FLAGS_DEF = define_flags_with_default(
     visualize_traj=False,
     N_steps=10,
     # N_steps=.08,
-    dt_feat=True,
+    dt_feat=False,
     use_pretrained_q_target=False,
     pretrained_target_path='',
     # shared_q_target=False,
@@ -125,7 +125,8 @@ def main(argv):
         }
         datasets, eval_samplers = {}, {}
 
-        for dt in [1, 2, 5, 10]:
+        dts = [1, 2, 5, 10]
+        for dt in dts:
             # load environment
             env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env](seed=FLAGS.seed)
             env.frame_skip = dt
@@ -206,12 +207,12 @@ def main(argv):
 
         with Timer() as train_timer:
             for batch_idx in range(FLAGS.n_train_step_per_epoch):
-                per_dataset_batch_size = int(FLAGS.batch_size / 3)
+                per_dataset_batch_size = int(FLAGS.batch_size / len(dts))
 
                 batch_dts = []
                 max_steps = int(FLAGS.N_steps / min(dts))
                 for dt in dts:
-                    batch_dt = subsample_batch(
+                    batch_dt = subsample_batch_n(
                         datasets[dt], per_dataset_batch_size, max_steps)
                     if FLAGS.dt_feat:
                         dt_feat = np.ones((per_dataset_batch_size, max_steps, 1))*dt

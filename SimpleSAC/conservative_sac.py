@@ -139,7 +139,7 @@ class ConservativeSAC(object):
             [self.config.discount**i for i in range(max_n)]).cuda()
         pre_mask = torch.repeat_interleave(torch.arange(max_n), batch_size).reshape((-1, batch_size)).T # :(
         mask = (pre_mask <= (n_steps - 1).reshape(-1, 1)).cuda()
-        summed_reward = torch.sum(rewards.squeeze()*discounts*mask, axis=1)
+        summed_reward = torch.sum(rewards.squeeze(dim=2)*discounts*mask, axis=1)
         q_target = summed_reward + (1. - dones[next_idx]).squeeze() * (self.config.discount**(n_steps)).cuda() * target_q_values
         qf1_loss = F.mse_loss(q1_pred, q_target.detach())
         qf2_loss = F.mse_loss(q2_pred, q_target.detach())
