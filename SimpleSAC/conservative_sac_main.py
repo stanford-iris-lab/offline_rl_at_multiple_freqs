@@ -49,10 +49,11 @@ FLAGS_DEF = define_flags_with_default(
     visualize_traj=False,
     N_steps=10,
     # N_steps=.08,
+    N_datapoints=250000,
     dt_feat=False,
     use_pretrained_q_target=False,
     pretrained_target_path='',
-    # shared_q_target=False,
+    shared_q_target=False,
     # use_pretrained_q_target=True,
     # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.02/aec001f95d094fa598456707e8c81814/',
     # shared_q_target=True,
@@ -115,7 +116,7 @@ def main(argv):
             dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py")
             dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
             datasets[dt] = dataset
-    elif "goal-observable" in FLAGS.env:
+    elif "door-open-v2-goal-observable" in FLAGS.env:
         # find correct buffer file
         buffers = {
             1: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/door-open-v2-goal-observable/f87d142ac7e54d659d999cba3e5e5421/buffer.h5py",
@@ -138,7 +139,29 @@ def main(argv):
             if FLAGS.sparse:
                 dataset['rewards'] = (dataset['rewards'] == 10.0 * (dt/10)).astype('float32')
             datasets[dt] = dataset
-            
+    elif "drawer-open-v2-goal-observable" in FLAGS.env:
+        # find correct buffer file
+        buffers = {
+            1: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/a3240368c8534dc4bbae373acd166008/buffer.h5py",
+            2: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/fcbc6ee5141749a7a3bd3224e68c5f06/buffer.h5py",
+            5: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/85ffe681bb424d219305ebfed7d30581/buffer.h5py",
+            10: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/??180be33816c24878a114d3c9816d65d5??/buffer.h5py"
+        }
+        datasets, eval_samplers = {}, {}
+
+        dts = [1, 2, 5, 10]
+        for dt in dts:
+            # load environment
+            env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env](seed=FLAGS.seed)
+            env.frame_skip = dt
+            assert env.dt == dt * .00125
+            eval_samplers[dt] = TrajSampler(env, FLAGS.max_traj_length)
+
+            # fetch dataset
+            dataset = load_dataset(buffers[dt])
+            if FLAGS.sparse:
+                dataset['rewards'] = (dataset['rewards'] == 10.0 * (dt/10)).astype('float32')
+            datasets[dt] = dataset
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
 
@@ -211,11 +234,13 @@ def main(argv):
 
                 batch_dts = []
                 max_steps = int(FLAGS.N_steps / min(dts))
+                # max_steps = 1
                 for dt in dts:
                     batch_dt = subsample_batch_n(
                         datasets[dt], per_dataset_batch_size, max_steps)
                     if FLAGS.dt_feat:
                         dt_feat = np.ones((per_dataset_batch_size, max_steps, 1))*dt
+                        dt_feat = (dt_feat - np.mean(dts)) / np.std(dts)
                         batch_dt['observations'] = np.concatenate([
                             batch_dt['observations'], dt_feat], axis=2
                         ).astype(np.float32)
@@ -230,10 +255,11 @@ def main(argv):
                     batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
                 n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
+                # n_steps = torch.Tensor([1 for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
-                # if FLAGS.shared_q_target:
-                #     batch['next_observations'][:,(n_steps-1).long(),-1] = .02
+                if FLAGS.shared_q_target:
+                    batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
                 metrics.update(prefix_metrics(sac.train(batch, n_steps), 'sac'))
 
         with Timer() as eval_timer:
@@ -242,7 +268,7 @@ def main(argv):
                     # my_seed = eval_sampler._env.seed(FLAGS.seed)
                     video = epoch == 0 or (epoch + 1) % (FLAGS.eval_period * 10) == 0
                     output_file = os.path.join(
-                        wandb_logger.config.output_dir, f'eval_{epoch}.gif')
+                        wandb_logger.config.output_dir, f'eval_dt_{dt}_{epoch}.gif')
 
                     trajs = eval_sampler.sample(
                         sampler_policy, FLAGS.eval_n_trajs, FLAGS.dt_feat,
@@ -264,8 +290,8 @@ def main(argv):
                                 f'val_dt{dt}_epoch{epoch}.png', FLAGS.dt_feat, dt)
 
                     if "goal-observable" in FLAGS.env:
-                        metrics['max_success'] = np.mean([np.max(t['successes']) for t in trajs])
-                        metrics['final_state_success'] = np.mean([t['successes'][-1] for t in trajs])
+                        metrics[f'max_success_{dt}'] = np.mean([np.max(t['successes']) for t in trajs])
+                        metrics[f'final_state_success_{dt}'] = np.mean([t['successes'][-1] for t in trajs])
                     metrics[f'average_return_{dt}'] = np.mean([np.sum(t['rewards']) for t in trajs])
                     metrics[f'average_traj_length_{dt}'] = np.mean([len(t['rewards']) for t in trajs])
                     if FLAGS.save_model:
