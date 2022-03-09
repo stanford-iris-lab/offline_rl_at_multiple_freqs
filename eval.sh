@@ -42,4 +42,18 @@ DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
   # --load_model 'experiments/pendulum/mix_pcond/ad794d1af211434f9cab06cfd0784b5f/' # mixed
   # --load_model 'experiments/.02/aec001f95d094fa598456707e8c81814' # 02 alone
   # --load_model 'experiments/.01/e9a0361454fb4aae989dcc90b8efd14e' # 01 alone
+MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
+  --logging.output_dir "./debug/" \
+  --logging.online False \
+  --env "${8}" \
+  --max_traj_length ${6} \
+  --cql.policy_lr ${2} \
+  --seed ${7} \
+  --device 'cuda' \
+  --save_model True \
+  --cql.cql_min_q_weight ${1} \
+  --cql.qf_lr ${3} \
+  --cql.discount ${5} \
+  --load_model \
+  --cql.buffer_file "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/door-open-v2-goal-observable/67fa1c8c44a94062b7b6d1a8914d176a/buffer.h5py"
 

@@ -85,7 +85,7 @@ class ConservativeSAC(object):
         soft_target_update(self.qf1, self.target_qf1, soft_target_update_rate)
         soft_target_update(self.qf2, self.target_qf2, soft_target_update_rate)
 
-    def train(self, batch, n_steps):
+    def train(self, batch, n_steps, max_q_target=False):
         self._total_steps += 1
 
         observations = batch['observations'][:,0,:]
@@ -118,10 +118,26 @@ class ConservativeSAC(object):
 
         new_next_actions, next_log_pi = self.policy(next_observations[next_idx])
         if self.update_target: 
-            target_q_values = torch.min(
-                self.target_qf1(next_observations[next_idx], new_next_actions),
-                self.target_qf2(next_observations[next_idx], new_next_actions),
-            )
+            if max_q_target:
+                target_obs = {}
+                dts = [1, 2, 5, 10]
+                for dt in dts:
+                    target_obs[dt] = next_observations.clone()
+                    target_obs[dt][:,:,-1] = (dt - np.mean(dts)) / np.std(dts)
+                debug = self.target_qf1(target_obs[1][next_idx], new_next_actions) 
+                all_qf1s = torch.vstack(
+                        [self.target_qf1(target_obs[dt][next_idx], new_next_actions) for dt in dts])
+                all_qf2s = torch.vstack(
+                        [self.target_qf2(target_obs[dt][next_idx], new_next_actions) for dt in dts])
+                target_q_values = torch.min(
+                    torch.max(all_qf1s, dim=0).values,
+                    torch.max(all_qf2s, dim=0).values,
+                )
+            else:
+               target_q_values = torch.min(
+                    self.target_qf1(next_observations[next_idx], new_next_actions),
+                    self.target_qf2(next_observations[next_idx], new_next_actions),
+                )
         else:
             # our target q-value doesn't use dt_feat
             target_q_values = torch.min(

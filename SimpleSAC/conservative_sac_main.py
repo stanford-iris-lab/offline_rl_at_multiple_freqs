@@ -41,7 +41,7 @@ FLAGS_DEF = define_flags_with_default(
     policy_log_std_multiplier=1.0,
     policy_log_std_offset=-1.0,
 
-    n_epochs=1200,
+    n_epochs=800,
     n_train_step_per_epoch=1000,
     eval_period=10,
     eval_n_trajs=5,
@@ -49,11 +49,11 @@ FLAGS_DEF = define_flags_with_default(
     visualize_traj=False,
     N_steps=10,
     # N_steps=.08,
-    N_datapoints=250000,
     dt_feat=False,
     use_pretrained_q_target=False,
     pretrained_target_path='',
     shared_q_target=False,
+    max_q_target=False,
     # use_pretrained_q_target=True,
     # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.02/aec001f95d094fa598456707e8c81814/',
     # shared_q_target=True,
@@ -260,7 +260,7 @@ def main(argv):
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
                 if FLAGS.shared_q_target:
                     batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
-                metrics.update(prefix_metrics(sac.train(batch, n_steps), 'sac'))
+                metrics.update(prefix_metrics(sac.train(batch, n_steps, FLAGS.max_q_target), 'sac'))
 
         with Timer() as eval_timer:
             for dt, eval_sampler in eval_samplers.items():
