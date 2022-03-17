@@ -115,7 +115,7 @@ def main(argv):
         metrics = {}
         with Timer() as rollout_timer:
             train_sampler.sample(
-                sampler_policy, FLAGS.n_env_steps_per_epoch, fs=FLAGS.dt,
+                sampler_policy, FLAGS.n_env_steps_per_epoch,
                 deterministic=False, replay_buffer=replay_buffer
             )
             metrics['env_steps'] = replay_buffer.total_steps
@@ -136,7 +136,7 @@ def main(argv):
                 video = epoch == 0 or (epoch + 1) % (FLAGS.eval_period * 10) == 0
                 output_file = os.path.join(wandb_logger.config.output_dir, f'eval_{epoch}.gif')
                 trajs = eval_sampler.sample(
-                    sampler_policy, FLAGS.eval_n_trajs, deterministic=True, fs=FLAGS.dt,
+                    sampler_policy, FLAGS.eval_n_trajs, False, deterministic=True,
                     video=video, output_file=output_file
                 )
 

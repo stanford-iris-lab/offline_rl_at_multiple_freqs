@@ -30,7 +30,7 @@ Xvfb :0 &
 #   # --load_model 'debug/b77da20b7bf844ce9cfb9893a02e754e/'
 MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
   --logging.output_dir "./debug/" \
-  --env "door-open-v2-goal-observable" \
+  --env "kitchen-complete-v0" \
   --n_epochs 1 \
   --n_train_step_per_epoch 1 \
   --max_traj_length 10 \

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=iris-hi
-#SBATCH --exclude=iris-hp-z8
+#SBATCH --exclude=iris-hp-z8,iris1,iris2
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --job-name="cql"
@@ -25,19 +25,6 @@ Xvfb :0 &
 #   --cql.qf_lr ${3} \
 #   --cql.discount ${5} \
 #   --cql.buffer_file "/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_${4}/data0.h5py" \
-#   --device 'cuda' \
-#   --save_model True
-
-# off-policy training in mujoco
-# MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.sac_main \
-#   --logging.output_dir "./experiments/collect/${1}/" \
-#   --logging.online True \
-#   --env ${1} \
-#   --dt ${4} \
-#   --max_traj_length ${6} \
-#   --sac.policy_lr ${2} \
-#   --seed ${3} \
-#   --sac.discount ${5} \
 #   --device 'cuda' \
 #   --save_model True
 

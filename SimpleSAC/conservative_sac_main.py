@@ -22,6 +22,7 @@ from viskit.logging import logger, setup_logger
 from dau.code.envs.biped import Walker
 from dau.code.envs.wrappers import WrapContinuousPendulumSparse
 from metaworld.envs import ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE
+import d4rl
 
 FLAGS_DEF = define_flags_with_default(
     env='halfcheetah-medium-v2',
@@ -49,6 +50,7 @@ FLAGS_DEF = define_flags_with_default(
     visualize_traj=False,
     N_steps=10,
     # N_steps=.08,
+    N_datapoints=10000,
     dt_feat=False,
     use_pretrained_q_target=False,
     pretrained_target_path='',
@@ -126,7 +128,7 @@ def main(argv):
         }
         datasets, eval_samplers = {}, {}
 
-        dts = [1, 2, 5, 10]
+        dts = list(buffers.keys())
         for dt in dts:
             # load environment
             env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env](seed=FLAGS.seed)
@@ -145,11 +147,11 @@ def main(argv):
             1: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/a3240368c8534dc4bbae373acd166008/buffer.h5py",
             2: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/fcbc6ee5141749a7a3bd3224e68c5f06/buffer.h5py",
             5: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/85ffe681bb424d219305ebfed7d30581/buffer.h5py",
-            10: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/??180be33816c24878a114d3c9816d65d5??/buffer.h5py"
+            10: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/180be33816c24878a114d3c9816d65d5/buffer.h5py"
         }
         datasets, eval_samplers = {}, {}
 
-        dts = [1, 2, 5, 10]
+        dts = list(buffers.keys())
         for dt in dts:
             # load environment
             env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env](seed=FLAGS.seed)
@@ -162,6 +164,11 @@ def main(argv):
             if FLAGS.sparse:
                 dataset['rewards'] = (dataset['rewards'] == 10.0 * (dt/10)).astype('float32')
             datasets[dt] = dataset
+    elif 'kitchen' in FLAGS.env:
+        datasets, eval_samplers = {}, {}
+        env = gym.make(FLAGS.env)
+        datasets[40] = d4rl.qlearning_dataset(env)
+        eval_samplers[40] = TrajSampler(env.unwrapped, FLAGS.max_traj_length)
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
 
@@ -223,8 +230,7 @@ def main(argv):
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
 
     viskit_metrics = {}
-    # dts = [.01, .02, .005]
-    dts = [1, 2, 5, 10]
+    dts = list(eval_samplers.keys())
     for epoch in range(FLAGS.n_epochs):
         metrics = {'epoch': epoch}
 
