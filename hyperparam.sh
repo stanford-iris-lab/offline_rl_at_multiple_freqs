@@ -1,13 +1,13 @@
 cql_min_q_weights=("5")
-policy_lrs=("3e-5")
-qf_lrs=("3e-4")
+policy_lrs=("3e-5" "1e-4")
+qf_lrs=("3e-4" "1e-4")
 # discounts=(".99") # .994987 .99, .9801
 discounts=(".99")
 seeds=("102")
 # sparse_rewards=("True")
-envs=("door-open-v2-goal-observable")
+# envs=("door-open-v2-goal-observable")
 # envs=("drawer-open-v2-goal-observable")
-# envs=("kitchen-complete-v0")
+envs=("kitchen-complete-v0")
 
 for cql_min_q_weight in ${cql_min_q_weights[@]} ; do
     for policy_lr in ${policy_lrs[@]} ; do

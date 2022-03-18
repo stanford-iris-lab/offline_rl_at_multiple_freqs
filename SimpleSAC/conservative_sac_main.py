@@ -14,7 +14,7 @@ import absl.app
 import absl.flags
 
 from .conservative_sac import ConservativeSAC
-from .replay_buffer import batch_to_torch, subsample_batch_n, load_dataset
+from .replay_buffer import batch_to_torch, subsample_batch_n, subsample_flat_batch_n, load_dataset, load_d4rl_dataset
 from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
 from .sampler import StepSampler, TrajSampler
 from .utils import *
@@ -48,7 +48,7 @@ FLAGS_DEF = define_flags_with_default(
     eval_n_trajs=5,
     load_model='',
     visualize_traj=False,
-    N_steps=10,
+    N_steps=1,
     # N_steps=.08,
     N_datapoints=10000,
     dt_feat=False,
@@ -167,7 +167,7 @@ def main(argv):
     elif 'kitchen' in FLAGS.env:
         datasets, eval_samplers = {}, {}
         env = gym.make(FLAGS.env)
-        datasets[40] = d4rl.qlearning_dataset(env)
+        datasets[40] = load_d4rl_dataset(env)
         eval_samplers[40] = TrajSampler(env.unwrapped, FLAGS.max_traj_length)
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
@@ -239,10 +239,11 @@ def main(argv):
                 per_dataset_batch_size = int(FLAGS.batch_size / len(dts))
 
                 batch_dts = []
-                max_steps = int(FLAGS.N_steps / min(dts))
-                # max_steps = 1
+                # max_steps = int(FLAGS.N_steps / min(dts))
+                max_steps = 1
                 for dt in dts:
-                    batch_dt = subsample_batch_n(
+                    # batch_dt is N, 1, D
+                    batch_dt = subsample_flat_batch_n(
                         datasets[dt], per_dataset_batch_size, max_steps)
                     if FLAGS.dt_feat:
                         dt_feat = np.ones((per_dataset_batch_size, max_steps, 1))*dt
@@ -260,8 +261,8 @@ def main(argv):
                 for k in batch_dts[0].keys():
                     batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
-                n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
-                # n_steps = torch.Tensor([1 for dt in dts])
+                # n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
+                n_steps = torch.Tensor([1 for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
                 if FLAGS.shared_q_target:

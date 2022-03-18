@@ -3,7 +3,7 @@ import h5py
 from queue import Queue
 import threading
 
-# import d4rl
+import d4rl
 
 import numpy as np
 import torch
@@ -113,15 +113,15 @@ def batch_to_torch(batch, device):
     }
 
 
-# def get_d4rl_dataset(env):
-#     dataset = d4rl.qlearning_dataset(env, dataset='halfcheetah-medium-v0')
-#     return dict(
-#         observations=dataset['observations'],
-#         actions=dataset['actions'],
-#         next_observations=dataset['next_observations'],
-#         rewards=dataset['rewards'],
-#         dones=dataset['terminals'].astype(np.float32),
-#     )
+def load_d4rl_dataset(env):
+    dataset = d4rl.qlearning_dataset(env)
+    return dict(
+        observations=dataset['observations'],
+        actions=dataset['actions'],
+        next_observations=dataset['next_observations'],
+        rewards=dataset['rewards'],
+        dones=dataset['terminals'].astype(np.float32),
+    )
 
 def load_dataset(h5path):
     dataset_file = h5py.File(h5path, "r")
@@ -149,12 +149,19 @@ def index_batch(batch, indices):
         indexed[key] = batch[key][indices, ...]
     return indexed
 
+def index_batch_flat_n(batch, indices, size, n_steps):
+    """Index into batches formatted (B, D)"""
+    indexed = {}
+    for key in batch.keys():
+        indexed[key] = batch[key][indices].reshape(size, int(n_steps), -1)
+    return indexed
+
 def index_batch_n(batch, indices, size, n_steps):
+    """Index into batches formatted (T, B, D)"""
     indexed = {}
     for key in batch.keys():
         indexed[key] = batch[key][indices[0], indices[1]].reshape(size, int(n_steps), -1)
     return indexed
-
 
 def parition_batch_train_test(batch, train_ratio):
     train_indices = np.random.rand(batch['observations'].shape[0]) < train_ratio
@@ -166,6 +173,25 @@ def subsample_batch(batch, size):
     indices = np.random.randint(batch['observations'].shape[0], size=size)
     return index_batch(batch, indices)
 
+def subsample_flat_batch_n(batch, size, n_steps):
+    dones = batch['dones'].nonzero()[0]
+    # concatenate done_idx with traj lens
+    dones_and_lens = np.vstack((
+        np.roll(dones, shift=1),
+        np.diff(dones, prepend=0)))
+    dones_and_lens[0,0] = 0
+    # select (batch_idx, len) pairs from batch
+    batch_indices = np.random.choice(dones.shape[0], size=size)
+    batch_indices_and_lens = dones_and_lens[:,batch_indices]
+    # select steps from trajectory
+    traj_indices = np.random.randint(batch_indices_and_lens[1]-n_steps)
+    # add with done_idx to get flat indices
+    indices = traj_indices + batch_indices_and_lens[0]
+    # add next n_steps to trajectory indices
+    ascending_idxs = np.tile(np.arange(n_steps), size)
+    indices = np.repeat(indices, n_steps) + ascending_idxs
+    return index_batch_flat_n(batch, indices, size, n_steps) # B, N, D
+
 def subsample_batch_n(batch, size, n_steps):
     ascending_idxs = np.tile(np.arange(n_steps), size)
     # pick random steps in trajectory
@@ -176,7 +202,7 @@ def subsample_batch_n(batch, size, n_steps):
     batch_indices = np.random.randint(batch['rewards'].shape[1], size=size)
     batch_indices = np.repeat(batch_indices, n_steps)
     indices = np.vstack((traj_indices, batch_indices)).astype(int) # should be T, B
-    return index_batch_n(batch, indices, size, n_steps)
+    return index_batch_n(batch, indices, size, n_steps) # N, 1, D
 
 
 def concatenate_batches(batches):

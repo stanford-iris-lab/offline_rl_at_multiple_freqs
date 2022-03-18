@@ -105,11 +105,14 @@ class TrajSampler(object):
                 actions.append(action)
                 rewards.append(reward)
                 dones.append(done)
-                successes.append(info['success'])
+                successes.append(info['score'])
                 next_observations.append(next_observation)
                 if video and traj == 0:
-                    imgs.append(self.env.render(offscreen=True))
+                    # imgs.append(self.env.render(offscreen=True))
                     # imgs.append(self.env.render(mode='rgb_array'))
+                    from d4rl.kitchen.adept_envs.franka.kitchen_multitask_v0 import KitchenTaskRelaxV1
+                    imgs.append(KitchenTaskRelaxV1.render(self.env, 'rgb_array'))
+
 
                 if replay_buffer is not None:
                     replay_buffer.add_sample(
