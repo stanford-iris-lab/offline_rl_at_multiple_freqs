@@ -8,6 +8,7 @@ import pprint
 
 import gym
 import torch
+import d4rl
 
 import absl.app
 import absl.flags
@@ -30,7 +31,7 @@ FLAGS_DEF = define_flags_with_default(
     seed=42,
     device='cpu',
     save_model=False,
-    dt=5,
+    dt=80,
 
     policy_arch='256-256',
     qf_arch='256-256',
@@ -74,6 +75,15 @@ def main(argv):
         assert test_env.dt == FLAGS.dt * .00125
         train_sampler = StepSampler(train_env.unwrapped, FLAGS.max_traj_length)
         eval_sampler = TrajSampler(test_env.unwrapped, FLAGS.max_traj_length)
+    elif 'kitchen' in FLAGS.env:
+        train_env = gym.make(FLAGS.env).unwrapped
+        train_env.frame_skip = FLAGS.dt
+        test_env = gym.make(FLAGS.env).unwrapped
+        test_env.frame_skip = FLAGS.dt
+        assert train_env.dt == FLAGS.dt * .002
+        assert test_env.dt == FLAGS.dt * .002
+        train_sampler = StepSampler(train_env, FLAGS.max_traj_length)
+        eval_sampler = TrajSampler(test_env, FLAGS.max_traj_length)
     else:
         train_sampler = StepSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)

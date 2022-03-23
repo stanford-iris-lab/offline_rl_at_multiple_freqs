@@ -8,7 +8,7 @@ import pprint
 
 import gym
 import torch
-# import d4rl
+import d4rl
 
 import absl.app
 import absl.flags
@@ -22,7 +22,6 @@ from viskit.logging import logger, setup_logger
 from dau.code.envs.biped import Walker
 from dau.code.envs.wrappers import WrapContinuousPendulumSparse
 from metaworld.envs import ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE
-import d4rl
 
 FLAGS_DEF = define_flags_with_default(
     env='halfcheetah-medium-v2',
@@ -48,9 +47,9 @@ FLAGS_DEF = define_flags_with_default(
     eval_n_trajs=5,
     load_model='',
     visualize_traj=False,
-    N_steps=1,
+    N_steps=80,
     # N_steps=.08,
-    N_datapoints=10000,
+    N_datapoints=250000,
     dt_feat=False,
     use_pretrained_q_target=False,
     pretrained_target_path='',
@@ -168,7 +167,18 @@ def main(argv):
         datasets, eval_samplers = {}, {}
         env = gym.make(FLAGS.env)
         datasets[40] = load_d4rl_dataset(env)
-        eval_samplers[40] = TrajSampler(env.unwrapped, FLAGS.max_traj_length)
+        datasets[80] = load_dataset(
+            '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/6027408585064c61bf5b356b14f96607/buffer.h5py')
+        
+        env40 = gym.make(FLAGS.env)
+        assert env40.dt == 40 * .002
+        eval_samplers[40] = TrajSampler(env40.unwrapped, FLAGS.max_traj_length)
+
+        env80 = gym.make(FLAGS.env)
+        env80.frame_skip = 80
+        env80.dt = 80 * .002
+        assert env80.dt == 80 * .002
+        eval_samplers[80] = TrajSampler(env80.unwrapped, FLAGS.max_traj_length)
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
 
@@ -239,12 +249,16 @@ def main(argv):
                 per_dataset_batch_size = int(FLAGS.batch_size / len(dts))
 
                 batch_dts = []
-                # max_steps = int(FLAGS.N_steps / min(dts))
-                max_steps = 1
+                max_steps = int(FLAGS.N_steps / min(dts))
+                # max_steps = 1
                 for dt in dts:
                     # batch_dt is N, 1, D
-                    batch_dt = subsample_flat_batch_n(
-                        datasets[dt], per_dataset_batch_size, max_steps)
+                    if dt == 40:
+                        batch_dt = subsample_flat_batch_n(
+                            datasets[dt], per_dataset_batch_size, max_steps)
+                    else:
+                        batch_dt = subsample_batch_n(
+                            datasets[dt], per_dataset_batch_size, max_steps)
                     if FLAGS.dt_feat:
                         dt_feat = np.ones((per_dataset_batch_size, max_steps, 1))*dt
                         dt_feat = (dt_feat - np.mean(dts)) / np.std(dts)
@@ -261,8 +275,8 @@ def main(argv):
                 for k in batch_dts[0].keys():
                     batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
-                # n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
-                n_steps = torch.Tensor([1 for dt in dts])
+                n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
+                # n_steps = torch.Tensor([1 for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
                 if FLAGS.shared_q_target:
