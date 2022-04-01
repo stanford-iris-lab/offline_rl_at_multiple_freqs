@@ -72,9 +72,7 @@ def main(argv):
         test_env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env](seed=FLAGS.seed)
         test_env.frame_skip = FLAGS.dt
         assert train_env.dt == FLAGS.dt * .00125
-        assert train_env.TASK_ELEMENTS == ['microwave', 'kettle']
         assert test_env.dt == FLAGS.dt * .00125
-        assert test_env.TASK_ELEMENTS == ['microwave', 'kettle']
         train_sampler = StepSampler(train_env.unwrapped, FLAGS.max_traj_length)
         eval_sampler = TrajSampler(test_env.unwrapped, FLAGS.max_traj_length)
     elif 'kitchen' in FLAGS.env:
@@ -84,6 +82,8 @@ def main(argv):
         test_env.frame_skip = FLAGS.dt
         assert train_env.dt == FLAGS.dt * .002
         assert test_env.dt == FLAGS.dt * .002
+        assert train_env.TASK_ELEMENTS == ['kettle']
+        assert test_env.TASK_ELEMENTS == ['kettle']
         train_sampler = StepSampler(train_env, FLAGS.max_traj_length)
         eval_sampler = TrajSampler(test_env, FLAGS.max_traj_length)
     else:
