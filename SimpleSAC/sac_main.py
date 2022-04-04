@@ -82,8 +82,8 @@ def main(argv):
         test_env.frame_skip = FLAGS.dt
         assert train_env.dt == FLAGS.dt * .002
         assert test_env.dt == FLAGS.dt * .002
-        assert train_env.TASK_ELEMENTS == ['kettle']
-        assert test_env.TASK_ELEMENTS == ['kettle']
+        assert train_env.TASK_ELEMENTS == ['light switch']
+        assert test_env.TASK_ELEMENTS == ['light switch']
         train_sampler = StepSampler(train_env, FLAGS.max_traj_length)
         eval_sampler = TrajSampler(test_env, FLAGS.max_traj_length)
     else:

@@ -14,7 +14,7 @@ import absl.app
 import absl.flags
 
 from .conservative_sac import ConservativeSAC
-from .replay_buffer import batch_to_torch, subsample_batch_n, subsample_flat_batch_n, load_dataset, load_d4rl_dataset
+from .replay_buffer import batch_to_torch, subsample_batch, subsample_flat_batch_n, load_dataset, load_d4rl_dataset
 from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
 from .sampler import StepSampler, TrajSampler
 from .utils import *
@@ -41,16 +41,16 @@ FLAGS_DEF = define_flags_with_default(
     policy_log_std_multiplier=1.0,
     policy_log_std_offset=-1.0,
 
-    n_epochs=800,
+    n_epochs=1200,
     n_train_step_per_epoch=1000,
     eval_period=10,
     eval_n_trajs=5,
     load_model='',
     visualize_traj=False,
-    N_steps=80,
+    N_steps=1,
     # N_steps=.08,
-    N_datapoints=250000,
-    dt_feat=False,
+    # N_datapoints=250000,
+    dt_feat=True,
     use_pretrained_q_target=False,
     pretrained_target_path='',
     shared_q_target=False,
@@ -104,9 +104,9 @@ def main(argv):
         #     dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
         #     datasets[dt] = dataset
     elif "pendulum_" in FLAGS.env:
-        dt = float(FLAGS.env.split('_')[1])
-        env = gym.make('Pendulum-v1').unwrapped
-        env.dt = dt
+        # dt = float(FLAGS.env.split('_')[1])
+        # env = gym.make('Pendulum-v1').unwrapped
+        # env.dt = dt
 
         datasets, eval_samplers = {}, {}
         for dt in [.01, .02, .005]:
@@ -114,7 +114,11 @@ def main(argv):
             env.dt = dt
             eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), FLAGS.max_traj_length)
             # eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), int(100 * (1/dt)))
-            dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py")
+            if dt == .005 or dt == .01:
+                half_angle = True
+            else:
+                half_angle = False
+            dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py", half_angle=half_angle)
             dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
             datasets[dt] = dataset
     elif "door-open-v2-goal-observable" in FLAGS.env:
@@ -167,18 +171,18 @@ def main(argv):
         datasets, eval_samplers = {}, {}
         env = gym.make(FLAGS.env)
         datasets[40] = load_d4rl_dataset(env)
-        datasets[80] = load_dataset(
-            '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/6027408585064c61bf5b356b14f96607/buffer.h5py')
+        # datasets[80] = load_dataset(
+        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/6027408585064c61bf5b356b14f96607/buffer.h5py')
         
         env40 = gym.make(FLAGS.env)
         assert env40.dt == 40 * .002
         eval_samplers[40] = TrajSampler(env40.unwrapped, FLAGS.max_traj_length)
 
-        env80 = gym.make(FLAGS.env)
-        env80.frame_skip = 80
-        env80.dt = 80 * .002
-        assert env80.dt == 80 * .002
-        eval_samplers[80] = TrajSampler(env80.unwrapped, FLAGS.max_traj_length)
+        # env80 = gym.make(FLAGS.env)
+        # env80.frame_skip = 80
+        # env80.dt = 80 * .002
+        # assert env80.dt == 80 * .002
+        # eval_samplers[80] = TrajSampler(env80.unwrapped, FLAGS.max_traj_length)
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
 
@@ -249,19 +253,21 @@ def main(argv):
                 per_dataset_batch_size = int(FLAGS.batch_size / len(dts))
 
                 batch_dts = []
-                max_steps = int(FLAGS.N_steps / min(dts))
-                # max_steps = 1
+                # max_steps = int(FLAGS.N_steps / min(dts))
+                max_steps = 1
                 for dt in dts:
                     # batch_dt is N, 1, D
                     if dt == 40:
                         batch_dt = subsample_flat_batch_n(
                             datasets[dt], per_dataset_batch_size, max_steps)
                     else:
-                        batch_dt = subsample_batch_n(
-                            datasets[dt], per_dataset_batch_size, max_steps)
+                        batch_dt = subsample_batch(
+                            datasets[dt], per_dataset_batch_size)
+                        # batch_dt = subsample_batch_n(
+                        #     datasets[dt], per_dataset_batch_size, max_steps)
                     if FLAGS.dt_feat:
                         dt_feat = np.ones((per_dataset_batch_size, max_steps, 1))*dt
-                        dt_feat = (dt_feat - np.mean(dts)) / np.std(dts)
+                        # dt_feat = (dt_feat - np.mean(dts)) / np.std(dts)
                         batch_dt['observations'] = np.concatenate([
                             batch_dt['observations'], dt_feat], axis=2
                         ).astype(np.float32)
@@ -275,12 +281,13 @@ def main(argv):
                 for k in batch_dts[0].keys():
                     batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
-                n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
-                # n_steps = torch.Tensor([1 for dt in dts])
+                # n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
+                n_steps = torch.Tensor([1 for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
                 if FLAGS.shared_q_target:
-                    batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
+                    batch['next_observations'][:,(n_steps-1).long(),-1] = max(dts)
+                    # batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
                 metrics.update(prefix_metrics(sac.train(batch, n_steps, FLAGS.max_q_target), 'sac'))
 
         with Timer() as eval_timer:

@@ -123,7 +123,7 @@ def load_d4rl_dataset(env):
         dones=dataset['terminals'].astype(np.float32),
     )
 
-def load_dataset(h5path):
+def load_dataset(h5path, half_angle=False):
     dataset_file = h5py.File(h5path, "r")
     dataset = dict(
         observations=dataset_file["obs"][:].astype(np.float32),
@@ -133,20 +133,26 @@ def load_dataset(h5path):
         dones=dataset_file["dones"][:].astype(np.float32),
     )
     # TODO: make consistent
+    if half_angle:
+        mask = dataset['observations'][:,1] >= 0
     for k, v in dataset.items():
         if len(v.shape) > 1:
             dim_obs = v.shape[1]
         else:
             dim_obs = 1
-        v = v[-250000:] # all of the mujoco buffers are empty after 500k
-        dataset[k] = v.reshape(500, 500, dim_obs) #v.reshape(500, 500, dim_obs) #v.reshape(500, 320, dim_obs) #v.reshape(500, 1000, dim_obs) # this only works for mujoco
-        # v.reshape(-1, 256, dim_obs) # this only works for pendulum
+        if half_angle:
+            v = v[mask]
+        # v = v[-250000:] # all of the mujoco buffers are empty after 500k
+        # dataset[k] = v.reshape(500, 500, dim_obs) #v.reshape(500, 500, dim_obs) #v.reshape(500, 320, dim_obs) #v.reshape(500, 1000, dim_obs) # this only works for mujoco
+        dataset[k] = v #v.reshape(-1, 256, dim_obs) # this only works for pendulum
     return dataset
 
 def index_batch(batch, indices):
     indexed = {}
     for key in batch.keys():
-        indexed[key] = batch[key][indices, ...]
+        indexed[key] = np.expand_dims(batch[key][indices, ...], 1)
+        if len(indexed[key].shape) < 3:
+            indexed[key] = np.expand_dims(indexed[key], 2)
     return indexed
 
 def index_batch_flat_n(batch, indices, size, n_steps):
