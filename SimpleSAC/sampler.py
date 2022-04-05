@@ -61,7 +61,7 @@ class TrajSampler(object):
         self.max_traj_length = max_traj_length
         self._env = env
 
-    def sample(self, policy, n_trajs, dt_feat, deterministic=False, replay_buffer=None, video=False, output_file=''):
+    def sample(self, policy, n_trajs, dt_feat, dt, deterministic=False, replay_buffer=None, video=False, output_file=''):
         trajs = []
         for traj in range(n_trajs):
             observations = []
@@ -81,7 +81,7 @@ class TrajSampler(object):
             for _ in range(self.max_traj_length):
                 if dt_feat:
                     observation = np.hstack([
-                        observation, [self._env.dt]]).astype(np.float32)
+                        observation, [dt]]).astype(np.float32)
                 action = policy(
                     np.expand_dims(observation, 0), deterministic=deterministic
                 )[0, :]

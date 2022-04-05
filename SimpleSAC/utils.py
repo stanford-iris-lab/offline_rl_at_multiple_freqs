@@ -208,7 +208,7 @@ def arr_to_th(arr) -> torch.Tensor:
 
     return torch.from_numpy(arr).float().to('cuda')
 
-def generate_pendulum_visualization(policy, qf1, qf2, logger, filename, dt_feat, dt=.02):
+def generate_pendulum_visualization(policy, qf1, qf2, logger, filename, dt_feat, dt):
     nb_pixels = 50
     theta_space = np.linspace(-np.pi, np.pi, nb_pixels)
     dtheta_space = np.linspace(-10, 10, nb_pixels)
@@ -220,7 +220,7 @@ def generate_pendulum_visualization(policy, qf1, qf2, logger, filename, dt_feat,
     observation = state_space
     
     if dt_feat:
-        dt_feat = (torch.ones((state_space.shape[0], 1)) * dt).cuda() # TODO not normalized
+        dt_feat = (torch.ones((state_space.shape[0], 1)) * dt).cuda()
         observation = torch.hstack([state_space, dt_feat])
     actions = policy(observation)[0]
     values = qf1(observation, actions).reshape(target_shape).squeeze()

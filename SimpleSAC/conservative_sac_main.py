@@ -41,14 +41,13 @@ FLAGS_DEF = define_flags_with_default(
     policy_log_std_multiplier=1.0,
     policy_log_std_offset=-1.0,
 
-    n_epochs=1200,
+    n_epochs=800,
     n_train_step_per_epoch=1000,
     eval_period=10,
     eval_n_trajs=5,
     load_model='',
     visualize_traj=False,
-    N_steps=1,
-    # N_steps=.08,
+    # N_steps=.02,
     # N_datapoints=250000,
     dt_feat=True,
     use_pretrained_q_target=False,
@@ -57,7 +56,6 @@ FLAGS_DEF = define_flags_with_default(
     max_q_target=False,
     # use_pretrained_q_target=True,
     # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.02/aec001f95d094fa598456707e8c81814/',
-    # shared_q_target=True,
 
     cql=ConservativeSAC.get_default_config(),
     logging=WandBLogger.get_default_config(),
@@ -104,10 +102,6 @@ def main(argv):
         #     dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
         #     datasets[dt] = dataset
     elif "pendulum_" in FLAGS.env:
-        # dt = float(FLAGS.env.split('_')[1])
-        # env = gym.make('Pendulum-v1').unwrapped
-        # env.dt = dt
-
         datasets, eval_samplers = {}, {}
         for dt in [.01, .02, .005]:
             env = gym.make('Pendulum-v1').unwrapped
@@ -267,12 +261,12 @@ def main(argv):
                         #     datasets[dt], per_dataset_batch_size, max_steps)
                     if FLAGS.dt_feat:
                         dt_feat = np.ones((per_dataset_batch_size, max_steps, 1))*dt
-                        # dt_feat = (dt_feat - np.mean(dts)) / np.std(dts)
+                        norm_dt = (dt_feat - np.mean(dts)) / np.std(dts)
                         batch_dt['observations'] = np.concatenate([
-                            batch_dt['observations'], dt_feat], axis=2
+                            batch_dt['observations'], norm_dt], axis=2
                         ).astype(np.float32)
                         batch_dt['next_observations'] = np.concatenate([
-                            batch_dt['next_observations'], dt_feat], axis=2
+                            batch_dt['next_observations'], norm_dt], axis=2
                         ).astype(np.float32)
                     batch_dts.append(batch_dt)
 
@@ -286,8 +280,8 @@ def main(argv):
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
                 if FLAGS.shared_q_target:
-                    batch['next_observations'][:,(n_steps-1).long(),-1] = max(dts)
-                    # batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
+                    # batch['next_observations'][:,(n_steps-1).long(),-1] = max(dts)
+                    batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
                 metrics.update(prefix_metrics(sac.train(batch, n_steps, FLAGS.max_q_target), 'sac'))
 
         with Timer() as eval_timer:
@@ -298,8 +292,9 @@ def main(argv):
                     output_file = os.path.join(
                         wandb_logger.config.output_dir, f'eval_dt_{dt}_{epoch}.gif')
 
+                    norm_dt = (dt - np.mean(dts)) / np.std(dts)
                     trajs = eval_sampler.sample(
-                        sampler_policy, FLAGS.eval_n_trajs, FLAGS.dt_feat,
+                        sampler_policy, FLAGS.eval_n_trajs, FLAGS.dt_feat, norm_dt,
                         deterministic=True, video=video, output_file=output_file
                     )
 
@@ -315,7 +310,7 @@ def main(argv):
                         elif "pendulum_" in FLAGS.env:
                             generate_pendulum_visualization(
                                 sac.policy, sac.qf1, sac.qf2, wandb_logger,
-                                f'val_dt{dt}_epoch{epoch}.png', FLAGS.dt_feat, dt)
+                                f'val_dt{dt}_epoch{epoch}.png', FLAGS.dt_feat, norm_dt)
 
                     if "goal-observable" in FLAGS.env:
                         metrics[f'max_success_{dt}'] = np.mean([np.max(t['successes']) for t in trajs])

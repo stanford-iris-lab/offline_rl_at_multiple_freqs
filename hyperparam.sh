@@ -1,6 +1,6 @@
 cql_min_q_weights=("5")
 # policy_lrs=("3e-5" "1e-4")
-policy_lrs=("3e-4" "1e-3") # pendulum
+policy_lrs=("3e-4") # pendulum
 qf_lrs=("3e-4") #"1e-4")
 # discounts=(".99") # .994987 .99, .9801
 discounts=(".99")
