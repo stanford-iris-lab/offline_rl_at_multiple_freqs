@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=iris-hi
-#SBATCH --exclude=iris-hp-z8,iris1,iris4
+#SBATCH --exclude=iris-hp-z8,iris1,iris4,iris5,iris6
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --job-name="cql"
@@ -30,7 +30,7 @@ Xvfb :0 &
 
 # off-line trainning mujoco
 MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
-  --logging.output_dir "./experiments/mujoco/${8}/" \
+  --logging.output_dir "./experiments/box2d/${8}/" \
   --logging.online True \
   --env "${8}" \
   --max_traj_length ${6} \

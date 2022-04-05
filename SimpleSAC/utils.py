@@ -208,7 +208,7 @@ def arr_to_th(arr) -> torch.Tensor:
 
     return torch.from_numpy(arr).float().to('cuda')
 
-def generate_pendulum_visualization(policy, qf1, qf2, logger, filename, dt_feat, dt=.02):
+def generate_pendulum_visualization(policy, qf1, qf2, logger, filename, dt_feat, dt):
     nb_pixels = 50
     theta_space = np.linspace(-np.pi, np.pi, nb_pixels)
     dtheta_space = np.linspace(-10, 10, nb_pixels)
