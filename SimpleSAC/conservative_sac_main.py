@@ -47,12 +47,12 @@ FLAGS_DEF = define_flags_with_default(
     eval_n_trajs=5,
     load_model='',
     visualize_traj=False,
-    N_steps=.02,
+    # N_steps=.02,
     # N_datapoints=250000,
     dt_feat=True,
     use_pretrained_q_target=False,
     pretrained_target_path='',
-    shared_q_target=True,
+    shared_q_target=False,
     max_q_target=False,
     # use_pretrained_q_target=True,
     # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.02/aec001f95d094fa598456707e8c81814/',
@@ -234,7 +234,7 @@ def main(argv):
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
 
     viskit_metrics = {}
-    dts = list(eval_samplers.keys())
+    dts = sorted(list(eval_samplers.keys()))
     for epoch in range(FLAGS.n_epochs):
         metrics = {'epoch': epoch}
 
@@ -243,8 +243,8 @@ def main(argv):
                 per_dataset_batch_size = int(FLAGS.batch_size / len(dts))
 
                 batch_dts = []
-                max_steps = int(FLAGS.N_steps / min(dts))
-                # max_steps = 1
+                # max_steps = int(FLAGS.N_steps / min(dts))
+                max_steps = 1
                 for dt in dts:
                     # batch_dt is N, 1, D
                     if dt == 40:
@@ -269,14 +269,16 @@ def main(argv):
                 for k in batch_dts[0].keys():
                     batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
-                n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
-                # n_steps = torch.Tensor([1 for dt in dts])
+                # n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
+                n_steps = torch.Tensor([1 for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
                 if FLAGS.shared_q_target:
                     # batch['next_observations'][:,(n_steps-1).long(),-1] = max(dts)
                     batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
-                metrics.update(prefix_metrics(sac.train(batch, n_steps, FLAGS.max_q_target), 'sac'))
+                discount_arr = torch.Tensor([FLAGS.cql.discount ** (dt/max(dts)) for dt in dts]).cuda()
+                discount_arr =  discount_arr.repeat_interleave(per_dataset_batch_size)
+                metrics.update(prefix_metrics(sac.train(batch, n_steps, discount_arr, FLAGS.max_q_target), 'sac'))
 
         with Timer() as eval_timer:
             for dt, eval_sampler in eval_samplers.items():
