@@ -269,8 +269,8 @@ def main(argv):
                 for k in batch_dts[0].keys():
                     batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
-                # n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
-                n_steps = torch.Tensor([1 for dt in dts])
+                n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
+                # n_steps = torch.Tensor([1 for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
                 if FLAGS.shared_q_target:
