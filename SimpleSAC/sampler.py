@@ -112,7 +112,7 @@ class TrajSampler(object):
                 next_observations.append(next_observation)
                 if video and traj == 0:
                     if 'rgb_array' in self.env.metadata['render.modes']:
-                        if self.env.env.spec._env_name == 'kitchen-complete':
+                        if True:
                             from d4rl.kitchen.adept_envs.franka.kitchen_multitask_v0 import KitchenTaskRelaxV1
                             imgs.append(KitchenTaskRelaxV1.render(self.env, 'rgb_array'))
                         else:
