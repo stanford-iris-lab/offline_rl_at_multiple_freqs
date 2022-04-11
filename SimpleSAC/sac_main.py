@@ -14,7 +14,7 @@ import absl.app
 import absl.flags
 
 from .sac import SAC
-from .replay_buffer import ReplayBuffer, batch_to_torch
+from .replay_buffer import ReplayBuffer, batch_to_torch, load_d4rl_dataset
 from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
 from .sampler import StepSampler, TrajSampler
 from .utils import Timer, define_flags_with_default, set_random_seed, print_flags, get_user_flags, prefix_metrics
@@ -28,6 +28,7 @@ FLAGS_DEF = define_flags_with_default(
     env='door-open-v2-goal-observable', # 'drawer-open-v2-goal-observable',
     max_traj_length=500,
     replay_buffer_size=1000000,
+    init_buffer=False,
     seed=42,
     device='cpu',
     save_model=False,
@@ -82,8 +83,6 @@ def main(argv):
         test_env.frame_skip = FLAGS.dt
         assert train_env.dt == FLAGS.dt * .002
         assert test_env.dt == FLAGS.dt * .002
-        assert train_env.TASK_ELEMENTS == ['kettle']
-        assert test_env.TASK_ELEMENTS == ['kettle']
         train_sampler = StepSampler(train_env, FLAGS.max_traj_length)
         eval_sampler = TrajSampler(test_env, FLAGS.max_traj_length)
     else:
@@ -91,6 +90,15 @@ def main(argv):
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)
 
     replay_buffer = ReplayBuffer(FLAGS.replay_buffer_size)
+
+    if FLAGS.init_buffer:
+        data = load_d4rl_dataset(train_env)
+        replay_buffer = ReplayBuffer(FLAGS.replay_buffer_size, data=data)
+        print(f'After initialization buffer is on index' \
+            ' {replay_buffer._next_idx} with max size of' \
+            ' {replay_buffer._max_size}')
+    else:
+        replay_buffer = ReplayBuffer(FLAGS.replay_buffer_size)
 
     policy = TanhGaussianPolicy(
         train_sampler.env.observation_space.shape[0],

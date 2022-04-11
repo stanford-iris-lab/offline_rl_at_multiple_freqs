@@ -34,6 +34,7 @@ MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.sac_main \
   --logging.online True \
   --env ${1} \
   --dt ${4} \
+  --init_buffer True \
   --max_traj_length ${6} \
   --sac.policy_lr ${2} \
   --seed ${3} \

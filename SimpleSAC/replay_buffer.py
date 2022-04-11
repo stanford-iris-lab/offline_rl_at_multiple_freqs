@@ -138,10 +138,7 @@ def load_dataset(h5path):
             dim_obs = v.shape[1]
         else:
             dim_obs = 1
-        # v = v[-250000:] # all of the mujoco buffers are empty after 500k
-        # dataset[k] = v.reshape(500, 500, dim_obs) #v.reshape(500, 500, dim_obs) #v.reshape(500, 320, dim_obs) #v.reshape(500, 1000, dim_obs) # this only works for mujoco
-
-        dataset[k] = v.reshape(-1, 256, dim_obs) # this only works for pendulum
+        v = v[-250000:] # all of the mujoco buffers are empty after 500k
 
     return dataset
 
