@@ -156,6 +156,7 @@ def main(argv):
             dataset = load_dataset(buffers[dt])
             if FLAGS.sparse:
                 dataset['rewards'] = (dataset['rewards'] == 10.0 * (dt/10)).astype('float32')
+            dataset['rewards'] = dataset['rewards'] * (dt/.02)
             datasets[dt] = dataset
     elif 'kitchen' in FLAGS.env:
         datasets, eval_samplers = {}, {}

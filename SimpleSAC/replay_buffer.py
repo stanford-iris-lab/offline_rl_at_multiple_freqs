@@ -140,7 +140,11 @@ def load_dataset(h5path):
             dim_obs = 1
         # v = v[-250000:] # all of the mujoco buffers are empty after 500k
         # dataset[k] = v.reshape(500, 500, dim_obs) #v.reshape(500, 500, dim_obs) #v.reshape(500, 320, dim_obs) #v.reshape(500, 1000, dim_obs) # this only works for mujoco
-        dataset[k] = v.reshape(-1, 256, dim_obs) # this only works for pendulum
+        v = v.reshape(-1, 2500, 256, dim_obs) # this only works for pendulum
+        dataset[k] = v.transpose(1, 0, 2, 3).reshape(2500, -1, dim_obs)
+        if k == 'dones':
+            dataset[k][-1] = 1
+        # TODO: fix reshape
     return dataset
 
 def index_batch(batch, indices):
