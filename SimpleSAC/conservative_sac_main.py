@@ -16,7 +16,7 @@ import absl.flags
 from .conservative_sac import ConservativeSAC
 from .replay_buffer import batch_to_torch, subsample_batch, subsample_flat_batch_n, load_dataset, load_d4rl_dataset
 from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
-from .sampler import StepSampler, TrajSampler
+from .sampler import TrajSampler
 from .utils import *
 from viskit.logging import logger, setup_logger
 from dau.code.envs.biped import Walker
@@ -160,6 +160,7 @@ def main(argv):
             dataset = load_dataset(buffers[dt])
             if FLAGS.sparse:
                 dataset['rewards'] = (dataset['rewards'] == 10.0 * (dt/10)).astype('float32')
+            dataset['rewards'] = dataset['rewards'] * (dt/.02)
             datasets[dt] = dataset
     elif 'kitchen' in FLAGS.env:
         datasets, eval_samplers = {}, {}
@@ -238,7 +239,7 @@ def main(argv):
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
 
     viskit_metrics = {}
-    dts = list(eval_samplers.keys())
+    dts = sorted(list(eval_samplers.keys()))
     for epoch in range(FLAGS.n_epochs):
         metrics = {'epoch': epoch}
 
@@ -282,7 +283,9 @@ def main(argv):
                 if FLAGS.shared_q_target:
                     # batch['next_observations'][:,(n_steps-1).long(),-1] = max(dts)
                     batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
-                metrics.update(prefix_metrics(sac.train(batch, n_steps, FLAGS.max_q_target), 'sac'))
+                discount_arr = torch.Tensor([FLAGS.cql.discount ** (dt/max(dts)) for dt in dts]).cuda()
+                discount_arr =  discount_arr.repeat_interleave(per_dataset_batch_size)
+                metrics.update(prefix_metrics(sac.train(batch, n_steps, discount_arr, FLAGS.max_q_target), 'sac'))
 
         with Timer() as eval_timer:
             for dt, eval_sampler in eval_samplers.items():
@@ -308,6 +311,7 @@ def main(argv):
                             metrics['hip1'] = wandb_logger.plot(mean_actions[:,2])
                             metrics['knee1'] = wandb_logger.plot(mean_actions[:,3])
                         elif "pendulum_" in FLAGS.env:
+                            norm_dt = (dt - np.mean(dts)) / np.std(dts)
                             generate_pendulum_visualization(
                                 sac.policy, sac.qf1, sac.qf2, wandb_logger,
                                 f'val_dt{dt}_epoch{epoch}.png', FLAGS.dt_feat, norm_dt)

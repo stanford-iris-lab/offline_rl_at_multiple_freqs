@@ -105,13 +105,20 @@ class TrajSampler(object):
                 actions.append(action)
                 rewards.append(reward)
                 dones.append(done)
-                successes.append(0)#info['score'])
+                if 'score' in info:
+                    successes.append(info['score'])
+                else:
+                    successes.append(0)
                 next_observations.append(next_observation)
                 if video and traj == 0:
-                    # imgs.append(self.env.render(offscreen=True))
-                    imgs.append(self.env.render(mode='rgb_array'))
-                    # from d4rl.kitchen.adept_envs.franka.kitchen_multitask_v0 import KitchenTaskRelaxV1
-                    # imgs.append(KitchenTaskRelaxV1.render(self.env, 'rgb_array'))
+                    if 'rgb_array' in self.env.metadata['render.modes']:
+                        if self.env.env.spec._env_name == 'kitchen-complete':
+                            from d4rl.kitchen.adept_envs.franka.kitchen_multitask_v0 import KitchenTaskRelaxV1
+                            imgs.append(KitchenTaskRelaxV1.render(self.env, 'rgb_array'))
+                        else:
+                            imgs.append(self.env.render(mode='rgb_array'))
+                    else: # for metaworld
+                        imgs.append(self.env.render(offscreen=True))
 
 
                 if replay_buffer is not None:

@@ -132,19 +132,24 @@ def load_dataset(h5path, half_angle=False):
         rewards=dataset_file["rewards"][:].astype(np.float32),
         dones=dataset_file["dones"][:].astype(np.float32),
     )
-    # TODO: make consistent
-    if half_angle:
-        mask = dataset['observations'][:,1] >= 0
+    # subsample trajectories first
+    num_episodes = dataset['dones'].reshape(-1, 256).sum(0)[0]
+    episode_length = int(10000 / num_episodes)
     for k, v in dataset.items():
         if len(v.shape) > 1:
             dim_obs = v.shape[1]
         else:
             dim_obs = 1
+        v = v.reshape(-1, episode_length, 256, dim_obs) # this only works for pendulum
+        v = v[:,:,:10,:]
+        dataset[k] = v.transpose(0, 2, 1, 3).reshape(-1, dim_obs)
+    # then select out correct angles
+    if half_angle:
+        mask = dataset['observations'][:,1] >= 0
+    for k, v in dataset.items():
         if half_angle:
             v = v[mask]
-        # v = v[-250000:] # all of the mujoco buffers are empty after 500k
-        # dataset[k] = v.reshape(500, 500, dim_obs) #v.reshape(500, 500, dim_obs) #v.reshape(500, 320, dim_obs) #v.reshape(500, 1000, dim_obs) # this only works for mujoco
-        dataset[k] = v #v.reshape(-1, 256, dim_obs) # this only works for pendulum
+        dataset[k] = v
     return dataset
 
 def index_batch(batch, indices):
