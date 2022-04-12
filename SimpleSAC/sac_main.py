@@ -14,6 +14,7 @@ import absl.app
 import absl.flags
 
 from .sac import SAC
+from .conservative_sac import ConservativeSAC
 from .replay_buffer import ReplayBuffer, batch_to_torch, load_d4rl_dataset
 from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
 from .sampler import StepSampler, TrajSampler
@@ -28,7 +29,7 @@ FLAGS_DEF = define_flags_with_default(
     env='door-open-v2-goal-observable', # 'drawer-open-v2-goal-observable',
     max_traj_length=500,
     replay_buffer_size=1000000,
-    init_buffer=False,
+    init_buffer=True,
     seed=42,
     device='cpu',
     save_model=False,
@@ -91,14 +92,9 @@ def main(argv):
 
     replay_buffer = ReplayBuffer(FLAGS.replay_buffer_size)
 
-    if FLAGS.init_buffer:
-        data = load_d4rl_dataset(train_env)
-        replay_buffer = ReplayBuffer(FLAGS.replay_buffer_size, data=data)
-        print(f'After initialization buffer is on index' \
-            ' {replay_buffer._next_idx} with max size of' \
-            ' {replay_buffer._max_size}')
-    else:
-        replay_buffer = ReplayBuffer(FLAGS.replay_buffer_size)
+    data = load_d4rl_dataset(train_env)
+    expert_buffer = ReplayBuffer(FLAGS.replay_buffer_size, data=data)
+    replay_buffer = ReplayBuffer(FLAGS.replay_buffer_size)
 
     policy = TanhGaussianPolicy(
         train_sampler.env.observation_space.shape[0],
@@ -126,6 +122,7 @@ def main(argv):
         FLAGS.sac.target_entropy = -np.prod(eval_sampler.env.action_space.shape).item()
 
     sac = SAC(FLAGS.sac, policy, qf1, qf2, target_qf1, target_qf2)
+    cql = ConservativeSAC(FLAGS.sac, policy, qf1, qf2, target_qf1, target_qf2)
     sac.torch_to_device(FLAGS.device)
 
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
@@ -144,12 +141,24 @@ def main(argv):
         with Timer() as train_timer:
             for batch_idx in range(FLAGS.n_train_step_per_epoch):
                 batch = batch_to_torch(replay_buffer.sample(FLAGS.batch_size), FLAGS.device)
+                expert_batch = batch_to_torch(expert_buffer.sample(FLAGS.batch_size), FLAGS.device)
+                for k, v in expert_batch.items():
+                    v = torch.unsqueeze(v, axis=1)
+                    if len(v.shape) < 3:
+                        v = torch.unsqueeze(v, axis=1)
+                    expert_batch[k] = v
+                n_steps = torch.Tensor([1 for dt in [40]])
+                n_steps = n_steps.repeat_interleave(FLAGS.batch_size)
                 if batch_idx + 1 == FLAGS.n_train_step_per_epoch:
                     metrics.update(
                         prefix_metrics(sac.train(batch), 'sac')
                     )
+                    metrics.update(
+                        prefix_metrics(cql.train(expert_batch, n_steps, False), 'cql')
+                    )
                 else:
                     sac.train(batch)
+                    cql.train(expert_batch, n_steps, False)
 
         with Timer() as eval_timer:
             if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:

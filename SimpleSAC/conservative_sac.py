@@ -84,7 +84,7 @@ class ConservativeSAC(object):
     def update_target_network(self, soft_target_update_rate):
         soft_target_update(self.qf1, self.target_qf1, soft_target_update_rate)
         soft_target_update(self.qf2, self.target_qf2, soft_target_update_rate)
-
+    
     def train(self, batch, n_steps, max_q_target=False):
         self._total_steps += 1
 

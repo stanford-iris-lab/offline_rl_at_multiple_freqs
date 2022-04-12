@@ -246,7 +246,7 @@ def main(argv):
                 max_steps = int(FLAGS.N_steps / min(dts))
                 # max_steps = 1
                 for dt in dts:
-                    # batch_dt is N, 1, D
+                    # batch_dt is B, N, D
                     if dt == 40:
                         batch_dt = subsample_flat_batch_n(
                             datasets[dt], per_dataset_batch_size, max_steps)
