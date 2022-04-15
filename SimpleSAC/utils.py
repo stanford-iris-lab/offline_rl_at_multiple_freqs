@@ -118,6 +118,10 @@ class WandBLogger(object):
     def load_pickle(self, loaddir):
         with open(os.path.join(loaddir, 'model.pkl'), 'rb') as fout:
             return pickle.load(fout)
+    
+    def load_pickle_from_filename(self, loadpath):
+        with open(loadpath, 'rb') as fout:
+            return pickle.load(fout)
 
     @property
     def experiment_id(self):

@@ -33,7 +33,7 @@ FLAGS_DEF = define_flags_with_default(
     seed=42,
     device='cpu',
     save_model=False,
-    dt=80,
+    dt=40,
 
     policy_arch='256-256',
     qf_arch='256-256',
@@ -45,6 +45,7 @@ FLAGS_DEF = define_flags_with_default(
     n_train_step_per_epoch=1000,
     eval_period=10,
     eval_n_trajs=5,
+    load_model_from_path='',
 
     batch_size=256,
 
@@ -89,43 +90,53 @@ def main(argv):
     else:
         train_sampler = StepSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)
-
+    
     replay_buffer = ReplayBuffer(FLAGS.replay_buffer_size)
 
     data = load_d4rl_dataset(train_env)
     expert_buffer = ReplayBuffer(FLAGS.replay_buffer_size, data=data)
     replay_buffer = ReplayBuffer(FLAGS.replay_buffer_size)
 
-    policy = TanhGaussianPolicy(
-        train_sampler.env.observation_space.shape[0],
-        train_sampler.env.action_space.shape[0],
-        FLAGS.policy_arch,
-        log_std_multiplier=FLAGS.policy_log_std_multiplier,
-        log_std_offset=FLAGS.policy_log_std_offset,
-    )
-
-    qf1 = FullyConnectedQFunction(
-        train_sampler.env.observation_space.shape[0],
-        train_sampler.env.action_space.shape[0],
-        FLAGS.qf_arch
-    )
-    target_qf1 = deepcopy(qf1)
-
-    qf2 = FullyConnectedQFunction(
-        train_sampler.env.observation_space.shape[0],
-        train_sampler.env.action_space.shape[0],
-        FLAGS.qf_arch
-    )
-    target_qf2 = deepcopy(qf2)
-
     if FLAGS.sac.target_entropy >= 0.0:
         FLAGS.sac.target_entropy = -np.prod(eval_sampler.env.action_space.shape).item()
 
-    sac = SAC(FLAGS.sac, policy, qf1, qf2, target_qf1, target_qf2)
-    cql = ConservativeSAC(FLAGS.sac, policy, qf1, qf2, target_qf1, target_qf2)
-    sac.torch_to_device(FLAGS.device)
+    if FLAGS.load_model_from_path:
+        loaded_model = wandb_logger.load_pickle_from_filename(
+            FLAGS.load_model_from_path)
+        print(f"Loaded model from epoch {loaded_model['epoch']}")
+        cql = loaded_model['sac']
+        sac = SAC(FLAGS.sac, cql.policy, cql.qf1, cql.qf2, cql.target_qf1, cql.target_qf2)
+        policy = sac.policy
+    else:
+        policy = TanhGaussianPolicy(
+            train_sampler.env.observation_space.shape[0],
+            train_sampler.env.action_space.shape[0],
+            FLAGS.policy_arch,
+            log_std_multiplier=FLAGS.policy_log_std_multiplier,
+            log_std_offset=FLAGS.policy_log_std_offset,
+        )
 
-    sampler_policy = SamplerPolicy(policy, FLAGS.device)
+        qf1 = FullyConnectedQFunction(
+            train_sampler.env.observation_space.shape[0],
+            train_sampler.env.action_space.shape[0],
+            FLAGS.qf_arch
+        )
+        target_qf1 = deepcopy(qf1)
+
+        qf2 = FullyConnectedQFunction(
+            train_sampler.env.observation_space.shape[0],
+            train_sampler.env.action_space.shape[0],
+            FLAGS.qf_arch
+        )
+        target_qf2 = deepcopy(qf2)
+
+        sac = SAC(FLAGS.sac, policy, qf1, qf2, target_qf1, target_qf2)
+        cql = ConservativeSAC(FLAGS.sac, sac.policy, sac.qf1, sac.qf2, sac.target_qf1, sac.target_qf2)
+
+    sac.torch_to_device(FLAGS.device)
+    cql.torch_to_device(FLAGS.device) # technically redundant because cql and sac share modules
+
+    sampler_policy = SamplerPolicy(sac.policy, FLAGS.device)
 
     viskit_metrics = {}
     for epoch in range(FLAGS.n_epochs):
@@ -151,13 +162,9 @@ def main(argv):
                 n_steps = n_steps.repeat_interleave(FLAGS.batch_size)
                 if batch_idx + 1 == FLAGS.n_train_step_per_epoch:
                     metrics.update(
-                        prefix_metrics(sac.train(batch), 'sac')
-                    )
-                    metrics.update(
                         prefix_metrics(cql.train(expert_batch, n_steps, False), 'cql')
                     )
                 else:
-                    sac.train(batch)
                     cql.train(expert_batch, n_steps, False)
 
         with Timer() as eval_timer:
@@ -166,7 +173,7 @@ def main(argv):
                 output_file = os.path.join(wandb_logger.config.output_dir, f'eval_{epoch}.gif')
                 trajs = eval_sampler.sample(
                     sampler_policy, FLAGS.eval_n_trajs, False, 0, deterministic=True,
-                    video=video, output_file=output_file
+                    video=False, output_file=output_file
                 )
 
                 metrics['average_return'] = np.mean([np.sum(t['rewards']) for t in trajs])
@@ -176,8 +183,13 @@ def main(argv):
                     metrics['final_state_success'] = np.mean([t['successes'][-1] for t in trajs])
 
                 if FLAGS.save_model:
+                    # if metrics['average_return'] >= 1:
+                    #     file_name = f"model_r{metrics['average_return']}_epoch{epoch}"
+                    # else:
+                    #     file_name = 'model.pkl'
+                    file_name = 'model.pkl'
                     save_data = {'sac': sac, 'variant': variant, 'epoch': epoch}
-                    wandb_logger.save_pickle(save_data, 'model.pkl')
+                    wandb_logger.save_pickle(save_data, file_name)
 
         metrics['rollout_time'] = rollout_timer()
         metrics['train_time'] = train_timer()

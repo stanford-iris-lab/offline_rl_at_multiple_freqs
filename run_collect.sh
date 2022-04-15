@@ -31,6 +31,7 @@ Xvfb :0 &
 # off-policy training in mujoco
 MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.sac_main \
   --logging.output_dir "./experiments/collect/${1}/" \
+  --load_model_from_path "/iris/u/kayburns/continuous-rl/CQL/experiments/mujoco/kitchen-complete-v0/0303f0c18c494c56aa7dda17218cb3f7/model.pkl" \
   --logging.online True \
   --env ${1} \
   --dt ${4} \
