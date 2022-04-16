@@ -2,7 +2,7 @@ envs=("kitchen-complete-v0")
 policy_lrs=("1e-3" "3e-4")
 seeds=("42") # only use even seeds, train_seed=seed-1, test_seed=seed
 # dts=("1" "2" "5" "10")
-dts=("40")
+dts=("80")
 # discounts=(".99799195166" ".99598793558" ".99" ".9801")
 discounts=(".99")
 # mtls=("2500" "1250" "500" "250")

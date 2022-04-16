@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from .model import Scalar, soft_target_update
 
 
-class ConservativeSAC(object):
+class MixSAC(object):
 
     @staticmethod
     def get_default_config(updates=None):
@@ -41,7 +41,7 @@ class ConservativeSAC(object):
         return config
 
     def __init__(self, config, policy, qf1, qf2, target_qf1, target_qf2, update_target=True):
-        self.config = ConservativeSAC.get_default_config(config)
+        self.config = MixSAC.get_default_config(config)
         self.policy = policy
         self.qf1 = qf1
         self.qf2 = qf2
@@ -85,7 +85,7 @@ class ConservativeSAC(object):
         soft_target_update(self.qf1, self.target_qf1, soft_target_update_rate)
         soft_target_update(self.qf2, self.target_qf2, soft_target_update_rate)
     
-    def train(self, batch, n_steps, max_q_target=False):
+    def train(self, batch, cql_weight, n_steps, max_q_target=False):
         self._total_steps += 1
 
         observations = batch['observations'][:,0,:]
@@ -206,8 +206,8 @@ class ConservativeSAC(object):
                     dim=1
                 )
             
-            cql_min_qf1_loss = torch.logsumexp(cql_cat_q1 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
-            cql_min_qf2_loss = torch.logsumexp(cql_cat_q2 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
+            cql_min_qf1_loss = torch.logsumexp(cql_weight * cql_cat_q1 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
+            cql_min_qf2_loss = torch.logsumexp(cql_weight * cql_cat_q2 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
 
             """Subtract the log likelihood of data"""
             cql_min_qf1_loss = cql_min_qf1_loss - q1_pred.mean() * self.config.cql_min_q_weight

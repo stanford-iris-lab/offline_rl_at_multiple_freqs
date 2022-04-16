@@ -13,8 +13,9 @@ import d4rl
 import absl.app
 import absl.flags
 
-from .sac import SAC
-from .conservative_sac import ConservativeSAC
+# from .sac import SAC
+# from .conservative_sac import ConservativeSAC
+from .mix_sac import MixSAC
 from .replay_buffer import ReplayBuffer, batch_to_torch, load_d4rl_dataset
 from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
 from .sampler import StepSampler, TrajSampler
@@ -49,7 +50,7 @@ FLAGS_DEF = define_flags_with_default(
 
     batch_size=256,
 
-    sac=SAC.get_default_config(),
+    sac=MixSAC.get_default_config(),
     logging=WandBLogger.get_default_config(),
 )
 
@@ -105,8 +106,8 @@ def main(argv):
             FLAGS.load_model_from_path)
         print(f"Loaded model from epoch {loaded_model['epoch']}")
         cql = loaded_model['sac']
-        sac = SAC(FLAGS.sac, cql.policy, cql.qf1, cql.qf2, cql.target_qf1, cql.target_qf2)
-        policy = sac.policy
+        mix_sac = MixSAC(FLAGS.sac, cql.policy, cql.qf1, cql.qf2, cql.target_qf1, cql.target_qf2)
+        policy = mix_sac.policy
     else:
         policy = TanhGaussianPolicy(
             train_sampler.env.observation_space.shape[0],
@@ -130,13 +131,12 @@ def main(argv):
         )
         target_qf2 = deepcopy(qf2)
 
-        sac = SAC(FLAGS.sac, policy, qf1, qf2, target_qf1, target_qf2)
-        cql = ConservativeSAC(FLAGS.sac, sac.policy, sac.qf1, sac.qf2, sac.target_qf1, sac.target_qf2)
+        # sac = SAC(FLAGS.sac, policy, qf1, qf2, target_qf1, target_qf2)
+        # cql = ConservativeSAC(FLAGS.sac, sac.policy, sac.qf1, sac.qf2, sac.target_qf1, sac.target_qf2)
 
-    sac.torch_to_device(FLAGS.device)
-    cql.torch_to_device(FLAGS.device) # technically redundant because cql and sac share modules
+    mix_sac.torch_to_device(FLAGS.device)
 
-    sampler_policy = SamplerPolicy(sac.policy, FLAGS.device)
+    sampler_policy = SamplerPolicy(mix_sac.policy, FLAGS.device)
 
     viskit_metrics = {}
     for epoch in range(FLAGS.n_epochs):
@@ -151,21 +151,34 @@ def main(argv):
 
         with Timer() as train_timer:
             for batch_idx in range(FLAGS.n_train_step_per_epoch):
-                batch = batch_to_torch(replay_buffer.sample(FLAGS.batch_size), FLAGS.device)
-                expert_batch = batch_to_torch(expert_buffer.sample(FLAGS.batch_size), FLAGS.device)
+                batch = batch_to_torch(replay_buffer.sample(FLAGS.batch_size//2), FLAGS.device)
+                expert_batch = batch_to_torch(expert_buffer.sample(FLAGS.batch_size//2), FLAGS.device)
+                # reshape expert_batch
                 for k, v in expert_batch.items():
                     v = torch.unsqueeze(v, axis=1)
                     if len(v.shape) < 3:
                         v = torch.unsqueeze(v, axis=1)
                     expert_batch[k] = v
+                # reshape batch
+                for k, v in batch.items():
+                    v = torch.unsqueeze(v, axis=1)
+                    if len(v.shape) < 3:
+                        v = torch.unsqueeze(v, axis=1)
+                    batch[k] = v
+                # concatenate batches
+                mix_batch = {}
+                for k in batch.keys():
+                    mix_batch[k] = torch.cat([batch[k], expert_batch[k]], axis=0)
                 n_steps = torch.Tensor([1 for dt in [40]])
                 n_steps = n_steps.repeat_interleave(FLAGS.batch_size)
+                cql_weight = torch.zeros(FLAGS.batch_size, 1).cuda()
+                cql_weight[FLAGS.batch_size//2:] = 1
                 if batch_idx + 1 == FLAGS.n_train_step_per_epoch:
                     metrics.update(
-                        prefix_metrics(cql.train(expert_batch, n_steps, False), 'cql')
+                        prefix_metrics(mix_sac.train(mix_batch, cql_weight, n_steps, False), 'mix_sac')
                     )
                 else:
-                    cql.train(expert_batch, n_steps, False)
+                    mix_sac.train(mix_batch, cql_weight, n_steps, False)
 
         with Timer() as eval_timer:
             if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
@@ -173,7 +186,7 @@ def main(argv):
                 output_file = os.path.join(wandb_logger.config.output_dir, f'eval_{epoch}.gif')
                 trajs = eval_sampler.sample(
                     sampler_policy, FLAGS.eval_n_trajs, False, 0, deterministic=True,
-                    video=False, output_file=output_file
+                    video=video, output_file=output_file
                 )
 
                 metrics['average_return'] = np.mean([np.sum(t['rewards']) for t in trajs])
@@ -188,7 +201,7 @@ def main(argv):
                     # else:
                     #     file_name = 'model.pkl'
                     file_name = 'model.pkl'
-                    save_data = {'sac': sac, 'variant': variant, 'epoch': epoch}
+                    save_data = {'sac': mix_sac, 'variant': variant, 'epoch': epoch}
                     wandb_logger.save_pickle(save_data, file_name)
 
         metrics['rollout_time'] = rollout_timer()
@@ -201,7 +214,7 @@ def main(argv):
         logger.dump_tabular(with_prefix=False, with_timestamp=False)
 
     if FLAGS.save_model:
-        save_data = {'sac': sac, 'variant': variant, 'epoch': epoch}
+        save_data = {'sac': mix_sac, 'variant': variant, 'epoch': epoch}
         wandb_logger.save_pickle(save_data, 'model.pkl')
         replay_buffer.store(os.path.join(wandb_logger.config.output_dir, 'buffer.h5py'))
 
