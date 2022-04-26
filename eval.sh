@@ -28,5 +28,5 @@ MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.sac_main \
   --n_train_step_per_epoch 0 \
   --n_epochs 1 \
   --eval_n_trajs 1 \
-  --load_model_from_path '/iris/u/kayburns/continuous-rl/CQL/experiments/mujoco/kitchen-complete-v0/0303f0c18c494c56aa7dda17218cb3f7/model.pkl' \
+  --load_model_from_path "/iris/u/kayburns/continuous-rl/CQL/experiments/mujoco/kitchen-complete-v0/efc0f5d5c6444833a8089e1d879601b3/model_r3.5999999046325684_epoch359.pkl" \
   --save_model False

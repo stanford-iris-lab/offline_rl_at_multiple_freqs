@@ -106,7 +106,22 @@ def main(argv):
             FLAGS.load_model_from_path)
         print(f"Loaded model from epoch {loaded_model['epoch']}")
         cql = loaded_model['sac']
-        mix_sac = MixSAC(FLAGS.sac, cql.policy, cql.qf1, cql.qf2, cql.target_qf1, cql.target_qf2)
+
+        qf1 = FullyConnectedQFunction(
+            train_sampler.env.observation_space.shape[0],
+            train_sampler.env.action_space.shape[0],
+            FLAGS.qf_arch
+        )
+        target_qf1 = deepcopy(qf1)
+        qf2 = FullyConnectedQFunction(
+            train_sampler.env.observation_space.shape[0],
+            train_sampler.env.action_space.shape[0],
+            FLAGS.qf_arch
+        )
+        target_qf2 = deepcopy(qf2)
+
+        mix_sac = MixSAC(FLAGS.sac, cql.policy, qf1, qf2, target_qf1, target_qf2)
+        # mix_sac = MixSAC(FLAGS.sac, cql.policy, cql.qf1, cql.qf2, cql.target_qf1, cql.target_qf2)
         policy = mix_sac.policy
     else:
         policy = TanhGaussianPolicy(
@@ -144,7 +159,7 @@ def main(argv):
         with Timer() as rollout_timer:
             train_sampler.sample(
                 sampler_policy, FLAGS.n_env_steps_per_epoch,
-                deterministic=False, replay_buffer=replay_buffer
+                deterministic=True, replay_buffer=replay_buffer
             )
             metrics['env_steps'] = replay_buffer.total_steps
             metrics['epoch'] = epoch
@@ -171,14 +186,14 @@ def main(argv):
                     mix_batch[k] = torch.cat([batch[k], expert_batch[k]], axis=0)
                 n_steps = torch.Tensor([1 for dt in [40]])
                 n_steps = n_steps.repeat_interleave(FLAGS.batch_size)
-                cql_weight = torch.zeros(FLAGS.batch_size, 1).cuda()
-                cql_weight[FLAGS.batch_size//2:] = 1
+                demo_mask = torch.zeros(FLAGS.batch_size).cuda()
+                demo_mask[FLAGS.batch_size//2:] = 1
                 if batch_idx + 1 == FLAGS.n_train_step_per_epoch:
                     metrics.update(
-                        prefix_metrics(mix_sac.train(mix_batch, cql_weight, n_steps, False), 'mix_sac')
+                        prefix_metrics(mix_sac.train(mix_batch, demo_mask, n_steps, False), 'mix_sac')
                     )
                 else:
-                    mix_sac.train(mix_batch, cql_weight, n_steps, False)
+                    mix_sac.train(mix_batch, demo_mask, n_steps, False)
 
         with Timer() as eval_timer:
             if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:

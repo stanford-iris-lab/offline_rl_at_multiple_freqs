@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=iris-hi
-#SBATCH --exclude=iris-hp-z8,iris1,iris4
+#SBATCH --exclude=iris-hp-z8,iris4,iris1
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --job-name="collect"
@@ -31,7 +31,7 @@ Xvfb :0 &
 # off-policy training in mujoco
 MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.sac_main \
   --logging.output_dir "./experiments/collect/${1}/" \
-  --load_model_from_path "/iris/u/kayburns/continuous-rl/CQL/experiments/mujoco/kitchen-complete-v0/0303f0c18c494c56aa7dda17218cb3f7/model.pkl" \
+  --load_model_from_path "/iris/u/kayburns/continuous-rl/CQL/experiments/mujoco/kitchen-complete-v0/efc0f5d5c6444833a8089e1d879601b3/model_r3.5999999046325684_epoch359.pkl" \
   --logging.online True \
   --env ${1} \
   --dt ${4} \
@@ -42,6 +42,7 @@ MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.sac_main \
   --sac.discount ${5} \
   --device 'cuda' \
   --save_model True
+
 
 # # off-line trainning mujoco
 # MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \

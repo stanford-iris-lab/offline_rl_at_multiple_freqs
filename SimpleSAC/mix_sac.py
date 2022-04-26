@@ -85,7 +85,7 @@ class MixSAC(object):
         soft_target_update(self.qf1, self.target_qf1, soft_target_update_rate)
         soft_target_update(self.qf2, self.target_qf2, soft_target_update_rate)
     
-    def train(self, batch, cql_weight, n_steps, max_q_target=False):
+    def train(self, batch, demo_mask, n_steps, max_q_target=False):
         self._total_steps += 1
 
         observations = batch['observations'][:,0,:]
@@ -108,8 +108,11 @@ class MixSAC(object):
             self.qf1(observations, new_actions),
             self.qf2(observations, new_actions),
         )
-        # policy_loss = (alpha*log_pi - q_new_actions).mean()
-        policy_loss = F.mse_loss(new_actions, actions)
+        replay_mask = torch.logical_not(demo_mask)
+        policy_loss = (alpha*log_pi - q_new_actions).mean() * 1e-3
+        policy_loss += 1e2 * F.mse_loss(
+            new_actions*demo_mask.reshape(-1, 1),
+            actions*demo_mask.reshape(-1, 1)) 
 
         next_idx = np.vstack(
             (np.arange(observations.shape[0]), (n_steps-1).long()))
@@ -206,12 +209,16 @@ class MixSAC(object):
                     dim=1
                 )
             
-            cql_min_qf1_loss = torch.logsumexp(cql_weight * cql_cat_q1 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
-            cql_min_qf2_loss = torch.logsumexp(cql_weight * cql_cat_q2 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
+            cql_min_qf1_loss = torch.logsumexp(demo_mask.reshape(-1, 1) * cql_cat_q1 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
+            # cql_min_qf1_loss = torch.logsumexp(cql_cat_q1 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
+            cql_min_qf2_loss = torch.logsumexp(demo_mask.reshape(-1, 1) * cql_cat_q2 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
+            # cql_min_qf2_loss = torch.logsumexp(cql_cat_q2 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
 
             """Subtract the log likelihood of data"""
-            cql_min_qf1_loss = cql_min_qf1_loss - q1_pred.mean() * self.config.cql_min_q_weight
-            cql_min_qf2_loss = cql_min_qf2_loss - q2_pred.mean() * self.config.cql_min_q_weight
+            cql_min_qf1_loss = cql_min_qf1_loss - (q1_pred * demo_mask).mean() * self.config.cql_min_q_weight
+            # cql_min_qf1_loss = cql_min_qf1_loss - q1_pred.mean() * self.config.cql_min_q_weight
+            cql_min_qf2_loss = cql_min_qf2_loss - (q2_pred * demo_mask).mean() * self.config.cql_min_q_weight
+            # cql_min_qf2_loss = cql_min_qf2_loss - q2_pred.mean() * self.config.cql_min_q_weight
 
             if self.config.cql_lagrange:
                 alpha_prime = torch.clamp(torch.exp(self.log_alpha_prime()), min=0.0, max=1000000.0)
