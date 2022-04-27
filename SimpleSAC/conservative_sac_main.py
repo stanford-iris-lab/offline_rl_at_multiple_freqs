@@ -47,7 +47,7 @@ FLAGS_DEF = define_flags_with_default(
     eval_n_trajs=5,
     load_model='',
     visualize_traj=False,
-    # N_steps=.02,
+    N_steps=.02,
     # N_datapoints=250000,
     dt_feat=True,
     use_pretrained_q_target=False,
@@ -248,11 +248,11 @@ def main(argv):
                 per_dataset_batch_size = int(FLAGS.batch_size / len(dts))
 
                 batch_dts = []
-                # max_steps = int(FLAGS.N_steps / min(dts))
-                max_steps = 1
+                max_steps = int(FLAGS.N_steps / min(dts))
+                # max_steps = 1
                 for dt in dts:
                     # batch_dt is N, 1, D
-                    if dt == 40:
+                    if dt == 40 or True:
                         batch_dt = subsample_flat_batch_n(
                             datasets[dt], per_dataset_batch_size, max_steps)
                     else:
@@ -276,8 +276,8 @@ def main(argv):
                 for k in batch_dts[0].keys():
                     batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
-                # n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
-                n_steps = torch.Tensor([1 for dt in dts])
+                n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
+                # n_steps = torch.Tensor([1 for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
                 if FLAGS.shared_q_target:
