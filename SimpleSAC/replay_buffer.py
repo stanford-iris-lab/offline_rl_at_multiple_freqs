@@ -65,6 +65,28 @@ class ReplayBuffer(object):
     def sample(self, batch_size):
         indices = np.random.randint(len(self), size=batch_size)
         return self.select(indices)
+    
+    def sample_n(self, batch_size, n):
+        indices = np.random.randint(len(self)-n, size=batch_size)
+        indices = np.repeat(indices, n) + np.tile(np.arange(n), batch_size)
+        batch = self.select(indices) # B * N, D
+        # reshape to B, N, D
+        for k, v in batch.items():
+            if len(v.shape) < 2:
+                batch[k] = v.reshape(batch_size, n, 1)
+            else:
+                batch[k] = v.reshape(batch_size, n, -1)
+        # zero out new episodes
+        batch['dones'] = np.cumsum(batch['dones'], axis=1)
+        for k, v in batch.items():
+            if k == 'next_observations':
+                # shift dones to prevent overwriting next_obs
+                dones_shift = np.roll(batch['dones'], 1, axis=1)
+                dones_shift[:,0,:] = 0
+                batch[k] = np.logical_not(dones_shift) * v
+            else:
+                batch[k] = np.logical_not(batch['dones']) * v
+        return batch
 
     def select(self, indices):
         return dict(

@@ -47,6 +47,7 @@ FLAGS_DEF = define_flags_with_default(
     eval_period=10,
     eval_n_trajs=5,
     load_model_from_path='',
+    N_steps=80,
 
     batch_size=256,
 
@@ -154,38 +155,42 @@ def main(argv):
     sampler_policy = SamplerPolicy(mix_sac.policy, FLAGS.device)
 
     viskit_metrics = {}
+    dts = [80, 40] # we load the replay buffer in first
     for epoch in range(FLAGS.n_epochs):
         metrics = {}
         with Timer() as rollout_timer:
             train_sampler.sample(
                 sampler_policy, FLAGS.n_env_steps_per_epoch,
-                deterministic=True, replay_buffer=replay_buffer
+                deterministic=False, replay_buffer=replay_buffer
             )
             metrics['env_steps'] = replay_buffer.total_steps
             metrics['epoch'] = epoch
 
         with Timer() as train_timer:
             for batch_idx in range(FLAGS.n_train_step_per_epoch):
-                batch = batch_to_torch(replay_buffer.sample(FLAGS.batch_size//2), FLAGS.device)
-                expert_batch = batch_to_torch(expert_buffer.sample(FLAGS.batch_size//2), FLAGS.device)
+                max_steps = int(FLAGS.N_steps / min(dts))
+                # max_steps = 1
+                batch = batch_to_torch(replay_buffer.sample_n(FLAGS.batch_size//2, max_steps), FLAGS.device)
+                expert_batch = batch_to_torch(expert_buffer.sample_n(FLAGS.batch_size//2, max_steps), FLAGS.device)
                 # reshape expert_batch
-                for k, v in expert_batch.items():
-                    v = torch.unsqueeze(v, axis=1)
-                    if len(v.shape) < 3:
-                        v = torch.unsqueeze(v, axis=1)
-                    expert_batch[k] = v
+                # for k, v in expert_batch.items():
+                #     v = torch.unsqueeze(v, axis=1)
+                #     if len(v.shape) < 3:
+                #         v = torch.unsqueeze(v, axis=1)
+                #     expert_batch[k] = v
                 # reshape batch
-                for k, v in batch.items():
-                    v = torch.unsqueeze(v, axis=1)
-                    if len(v.shape) < 3:
-                        v = torch.unsqueeze(v, axis=1)
-                    batch[k] = v
+                # for k, v in batch.items():
+                #     v = torch.unsqueeze(v, axis=1)
+                #     if len(v.shape) < 3:
+                #         v = torch.unsqueeze(v, axis=1)
+                #     batch[k] = v
                 # concatenate batches
                 mix_batch = {}
                 for k in batch.keys():
                     mix_batch[k] = torch.cat([batch[k], expert_batch[k]], axis=0)
-                n_steps = torch.Tensor([1 for dt in [40]])
-                n_steps = n_steps.repeat_interleave(FLAGS.batch_size)
+                n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
+                # n_steps = torch.Tensor([1 for dt in dts])
+                n_steps = n_steps.repeat_interleave(FLAGS.batch_size//2)
                 demo_mask = torch.zeros(FLAGS.batch_size).cuda()
                 demo_mask[FLAGS.batch_size//2:] = 1
                 if batch_idx + 1 == FLAGS.n_train_step_per_epoch:
