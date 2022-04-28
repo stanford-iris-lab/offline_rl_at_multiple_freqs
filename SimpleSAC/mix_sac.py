@@ -85,7 +85,7 @@ class MixSAC(object):
         soft_target_update(self.qf1, self.target_qf1, soft_target_update_rate)
         soft_target_update(self.qf2, self.target_qf2, soft_target_update_rate)
     
-    def train(self, batch, demo_mask, n_steps, max_q_target=False):
+    def train(self, batch, demo_mask, n_steps, discount_arr, max_q_target=False):
         self._total_steps += 1
 
         observations = batch['observations'][:,0,:]
@@ -152,15 +152,13 @@ class MixSAC(object):
         if self.config.backup_entropy:
             target_q_values = target_q_values - alpha * next_log_pi
 
-        # q_target = rewards + (1. - dones) * self.config.discount * target_q_values
         max_n = int(n_steps.max())
         batch_size = rewards.shape[0]
-        discounts = torch.Tensor(
-            [self.config.discount**i for i in range(max_n)]).cuda()
+        discounts = torch.stack([discount_arr**i for i in range(max_n)], axis=1)
         pre_mask = torch.repeat_interleave(torch.arange(max_n), batch_size).reshape((-1, batch_size)).T # :(
         mask = (pre_mask <= (n_steps - 1).reshape(-1, 1)).cuda()
         summed_reward = torch.sum(rewards.squeeze(dim=2)*discounts*mask, axis=1)
-        q_target = summed_reward + (1. - dones[next_idx]).squeeze() * (self.config.discount**(n_steps)).cuda() * target_q_values
+        q_target = summed_reward + (1. - dones[next_idx]).squeeze() * (discount_arr**(n_steps.cuda())) * target_q_values
         qf1_loss = F.mse_loss(q1_pred, q_target.detach())
         qf2_loss = F.mse_loss(q2_pred, q_target.detach())
 

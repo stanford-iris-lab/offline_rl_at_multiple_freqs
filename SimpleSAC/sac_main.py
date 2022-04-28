@@ -156,6 +156,7 @@ def main(argv):
 
     viskit_metrics = {}
     dts = [80, 40] # we load the replay buffer in first
+    per_dataset_batch_size = FLAGS.batch_size // len(dts)
     for epoch in range(FLAGS.n_epochs):
         metrics = {}
         with Timer() as rollout_timer:
@@ -190,15 +191,17 @@ def main(argv):
                     mix_batch[k] = torch.cat([batch[k], expert_batch[k]], axis=0)
                 n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
                 # n_steps = torch.Tensor([1 for dt in dts])
-                n_steps = n_steps.repeat_interleave(FLAGS.batch_size//2)
+                n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 demo_mask = torch.zeros(FLAGS.batch_size).cuda()
                 demo_mask[FLAGS.batch_size//2:] = 1
+                discount_arr = torch.Tensor([FLAGS.sac.discount ** (dt/max(dts)) for dt in dts]).cuda()
+                discount_arr =  discount_arr.repeat_interleave(per_dataset_batch_size)
                 if batch_idx + 1 == FLAGS.n_train_step_per_epoch:
                     metrics.update(
-                        prefix_metrics(mix_sac.train(mix_batch, demo_mask, n_steps, False), 'mix_sac')
+                        prefix_metrics(mix_sac.train(mix_batch, demo_mask, n_steps, discount_arr, False), 'mix_sac')
                     )
                 else:
-                    mix_sac.train(mix_batch, demo_mask, n_steps, False)
+                    mix_sac.train(mix_batch, demo_mask, n_steps, discount_arr, False)
 
         with Timer() as eval_timer:
             if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
