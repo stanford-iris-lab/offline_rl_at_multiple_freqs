@@ -70,6 +70,41 @@ class FullyConnectedNetwork(nn.Module):
     def forward(self, input_tensor):
         return self.network(input_tensor)
 
+class TwoHeadedFullyConnectedNetwork(nn.Module):
+
+    def __init__(self, input_dim, output_dim, arch='256-256', orthogonal_init=False):
+        super().__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.arch = arch
+        self.orthogonal_init = orthogonal_init
+
+        d = input_dim
+        modules = []
+        hidden_sizes = [int(h) for h in arch.split('-')]
+
+        for hidden_size in hidden_sizes:
+            fc = nn.Linear(d, hidden_size)
+            if orthogonal_init:
+                nn.init.orthogonal_(fc.weight, gain=np.sqrt(2))
+            modules.append(fc)
+            modules.append(nn.ReLU())
+            d = hidden_size
+
+        self.network = nn.Sequential(*modules)
+
+        self.last_fc = nn.Linear(d, output_dim)
+        self.last_fc_1 = nn.Linear(d, output_dim)
+        if orthogonal_init:
+            nn.init.orthogonal_(last_fc.weight, gain=np.sqrt(2))
+            nn.init.orthogonal_(last_fc_1.weight, gain=np.sqrt(2))
+
+    def forward(self, input_tensor, use_second_head=True):
+        if use_second_head:
+            return self.last_fc_1(self.network(input_tensor))
+        else:
+            return self.last_fc(self.network(input_tensor))
+
 
 class ReparameterizedTanhGaussian(nn.Module):
 
@@ -113,7 +148,6 @@ class ReparameterizedTanhGaussian(nn.Module):
 
         return action_sample, log_prob
 
-
 class TanhGaussianPolicy(nn.Module):
 
     def __init__(self, observation_dim, action_dim, arch='256-256',
@@ -145,6 +179,41 @@ class TanhGaussianPolicy(nn.Module):
         if repeat is not None:
             observations = extend_and_repeat(observations, 1, repeat)
         base_network_output = self.base_network(observations)
+        mean, log_std = torch.split(base_network_output, self.action_dim, dim=-1)
+        log_std = self.log_std_multiplier() * log_std + self.log_std_offset()
+        return self.tanh_gaussian(mean, log_std, deterministic)
+
+class TwoHeadedTanhGaussianPolicy(nn.Module):
+
+    def __init__(self, observation_dim, action_dim, arch='256-256',
+                 log_std_multiplier=1.0, log_std_offset=-1.0,
+                 orthogonal_init=False, no_tanh=False):
+        super().__init__()
+        self.observation_dim = observation_dim
+        self.action_dim = action_dim
+        self.arch = arch
+        self.orthogonal_init = orthogonal_init
+        self.no_tanh = no_tanh
+
+        self.base_network = TwoHeadedFullyConnectedNetwork(
+            observation_dim, 2 * action_dim, arch, orthogonal_init
+        )
+        self.log_std_multiplier = Scalar(log_std_multiplier)
+        self.log_std_offset = Scalar(log_std_offset)
+        self.tanh_gaussian = ReparameterizedTanhGaussian(no_tanh=no_tanh)
+
+    def log_prob(self, observations, actions, use_second_head=True):
+        if actions.ndim == 3:
+            observations = extend_and_repeat(observations, 1, actions.shape[1])
+        base_network_output = self.base_network(observations, use_second_head=True)
+        mean, log_std = torch.split(base_network_output, self.action_dim, dim=-1)
+        log_std = self.log_std_multiplier() * log_std + self.log_std_offset()
+        return self.tanh_gaussian.log_prob(mean, log_std, actions)
+
+    def forward(self, observations, deterministic=False, use_second_head=True, repeat=None):
+        if repeat is not None:
+            observations = extend_and_repeat(observations, 1, repeat)
+        base_network_output = self.base_network(observations, use_second_head=use_second_head)
         mean, log_std = torch.split(base_network_output, self.action_dim, dim=-1)
         log_std = self.log_std_multiplier() * log_std + self.log_std_offset()
         return self.tanh_gaussian(mean, log_std, deterministic)

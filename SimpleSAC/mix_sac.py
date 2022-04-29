@@ -93,8 +93,14 @@ class MixSAC(object):
         rewards = batch['rewards']
         next_observations = batch['next_observations']
         dones = batch['dones']
+        replay_mask = torch.logical_not(demo_mask)
 
-        new_actions, log_pi = self.policy(observations)
+        new_actions_demo, log_pi_demo = self.policy(
+            observations[:,:-1], use_second_head=False)
+        new_actions_replay, log_pi_replay = self.policy(
+            observations[:,:-1], use_second_head=True)
+        new_actions = new_actions_demo*demo_mask.unsqueeze(1) + new_actions_replay*replay_mask.unsqueeze(1)
+        log_pi = log_pi_demo*demo_mask + log_pi_replay*replay_mask
 
         if self.config.use_automatic_entropy_tuning:
             alpha_loss = -(self.log_alpha() * (log_pi + self.config.target_entropy).detach()).mean()
@@ -108,7 +114,6 @@ class MixSAC(object):
             self.qf1(observations, new_actions),
             self.qf2(observations, new_actions),
         )
-        replay_mask = torch.logical_not(demo_mask)
         policy_loss = (alpha*log_pi - q_new_actions).mean() * 1e-3
         policy_loss += 1e2 * F.mse_loss(
             new_actions*demo_mask.reshape(-1, 1),
@@ -120,7 +125,13 @@ class MixSAC(object):
         q1_pred = self.qf1(observations, actions)
         q2_pred = self.qf2(observations, actions)
 
-        new_next_actions, next_log_pi = self.policy(next_observations[next_idx])
+        new_next_actions_demo, next_log_pi_demo = self.policy(
+            next_observations[next_idx][:,:-1], use_second_head=False)
+        new_next_actions_replay, next_log_pi_replay = self.policy(
+            next_observations[next_idx][:,:-1], use_second_head=True)
+        new_next_actions = new_next_actions_demo*demo_mask.unsqueeze(1) + new_next_actions_replay*replay_mask.unsqueeze(1)
+        next_log_pi_demo = next_log_pi_demo*demo_mask + next_log_pi_replay*replay_mask
+        
         if self.update_target: 
             if max_q_target:
                 target_obs = {}
@@ -171,8 +182,12 @@ class MixSAC(object):
             batch_size = actions.shape[0]
             action_dim = actions.shape[-1]
             cql_random_actions = actions.new_empty((batch_size, self.config.cql_n_actions, action_dim), requires_grad=False).uniform_(-1, 1)
-            cql_current_actions, cql_current_log_pis = self.policy(observations, repeat=self.config.cql_n_actions)
-            cql_next_actions, cql_next_log_pis = self.policy(next_observations, repeat=self.config.cql_n_actions)
+            cql_current_actions, cql_current_log_pis = self.policy(
+                observations[:,:-1], repeat=self.config.cql_n_actions,
+                use_second_head=False)
+            cql_next_actions, cql_next_log_pis = self.policy(
+                next_observations[:,:-1], repeat=self.config.cql_n_actions,
+                use_second_head=False)
             cql_current_actions, cql_current_log_pis = cql_current_actions.detach(), cql_current_log_pis.detach()
             cql_next_actions, cql_next_log_pis = cql_next_actions.detach(), cql_next_log_pis.detach()
 
@@ -208,15 +223,11 @@ class MixSAC(object):
                 )
             
             cql_min_qf1_loss = torch.logsumexp(demo_mask.reshape(-1, 1) * cql_cat_q1 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
-            # cql_min_qf1_loss = torch.logsumexp(cql_cat_q1 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
             cql_min_qf2_loss = torch.logsumexp(demo_mask.reshape(-1, 1) * cql_cat_q2 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
-            # cql_min_qf2_loss = torch.logsumexp(cql_cat_q2 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
 
             """Subtract the log likelihood of data"""
             cql_min_qf1_loss = cql_min_qf1_loss - (q1_pred * demo_mask).mean() * self.config.cql_min_q_weight
-            # cql_min_qf1_loss = cql_min_qf1_loss - q1_pred.mean() * self.config.cql_min_q_weight
             cql_min_qf2_loss = cql_min_qf2_loss - (q2_pred * demo_mask).mean() * self.config.cql_min_q_weight
-            # cql_min_qf2_loss = cql_min_qf2_loss - q2_pred.mean() * self.config.cql_min_q_weight
 
             if self.config.cql_lagrange:
                 alpha_prime = torch.clamp(torch.exp(self.log_alpha_prime()), min=0.0, max=1000000.0)

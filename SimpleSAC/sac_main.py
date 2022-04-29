@@ -17,7 +17,7 @@ import absl.flags
 # from .conservative_sac import ConservativeSAC
 from .mix_sac import MixSAC
 from .replay_buffer import ReplayBuffer, batch_to_torch, load_d4rl_dataset
-from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
+from .model import TanhGaussianPolicy, TwoHeadedTanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
 from .sampler import StepSampler, TrajSampler
 from .utils import Timer, define_flags_with_default, set_random_seed, print_flags, get_user_flags, prefix_metrics
 from .utils import WandBLogger
@@ -48,6 +48,8 @@ FLAGS_DEF = define_flags_with_default(
     eval_n_trajs=5,
     load_model_from_path='',
     N_steps=80,
+    dt_feat=True,
+
 
     batch_size=256,
 
@@ -102,31 +104,46 @@ def main(argv):
     if FLAGS.sac.target_entropy >= 0.0:
         FLAGS.sac.target_entropy = -np.prod(eval_sampler.env.action_space.shape).item()
 
+    if FLAGS.dt_feat:
+        obs_shape = train_sampler.env.observation_space.shape[0]+1
+    else:
+        obs_shape = train_sampler.env.observation_space.shape[0]
     if FLAGS.load_model_from_path:
         loaded_model = wandb_logger.load_pickle_from_filename(
             FLAGS.load_model_from_path)
         print(f"Loaded model from epoch {loaded_model['epoch']}")
         cql = loaded_model['sac']
+        policy = TwoHeadedTanhGaussianPolicy(
+            train_sampler.env.observation_space.shape[0],
+            train_sampler.env.action_space.shape[0],
+            FLAGS.policy_arch,
+            log_std_multiplier=FLAGS.policy_log_std_multiplier,
+            log_std_offset=FLAGS.policy_log_std_offset,
+        )
+        pretrained_weights = cql.policy.state_dict()
+        pretrained_weights['base_network.last_fc.weight'] = pretrained_weights.pop('base_network.network.4.weight')
+        pretrained_weights['base_network.last_fc.bias'] = pretrained_weights.pop('base_network.network.4.bias')
+        policy.load_state_dict(pretrained_weights, strict=False)
 
         qf1 = FullyConnectedQFunction(
-            train_sampler.env.observation_space.shape[0],
+            obs_shape,
             train_sampler.env.action_space.shape[0],
             FLAGS.qf_arch
         )
         target_qf1 = deepcopy(qf1)
         qf2 = FullyConnectedQFunction(
-            train_sampler.env.observation_space.shape[0],
+            obs_shape,
             train_sampler.env.action_space.shape[0],
             FLAGS.qf_arch
         )
         target_qf2 = deepcopy(qf2)
 
-        mix_sac = MixSAC(FLAGS.sac, cql.policy, qf1, qf2, target_qf1, target_qf2)
+        mix_sac = MixSAC(FLAGS.sac, policy, qf1, qf2, target_qf1, target_qf2)
         # mix_sac = MixSAC(FLAGS.sac, cql.policy, cql.qf1, cql.qf2, cql.target_qf1, cql.target_qf2)
         policy = mix_sac.policy
     else:
         policy = TanhGaussianPolicy(
-            train_sampler.env.observation_space.shape[0],
+            obs_shape,
             train_sampler.env.action_space.shape[0],
             FLAGS.policy_arch,
             log_std_multiplier=FLAGS.policy_log_std_multiplier,
@@ -134,14 +151,14 @@ def main(argv):
         )
 
         qf1 = FullyConnectedQFunction(
-            train_sampler.env.observation_space.shape[0],
+            obs_shape,
             train_sampler.env.action_space.shape[0],
             FLAGS.qf_arch
         )
         target_qf1 = deepcopy(qf1)
 
         qf2 = FullyConnectedQFunction(
-            train_sampler.env.observation_space.shape[0],
+            obs_shape,
             train_sampler.env.action_space.shape[0],
             FLAGS.qf_arch
         )
@@ -171,20 +188,31 @@ def main(argv):
             for batch_idx in range(FLAGS.n_train_step_per_epoch):
                 max_steps = int(FLAGS.N_steps / min(dts))
                 # max_steps = 1
-                batch = batch_to_torch(replay_buffer.sample_n(FLAGS.batch_size//2, max_steps), FLAGS.device)
-                expert_batch = batch_to_torch(expert_buffer.sample_n(FLAGS.batch_size//2, max_steps), FLAGS.device)
-                # reshape expert_batch
-                # for k, v in expert_batch.items():
-                #     v = torch.unsqueeze(v, axis=1)
-                #     if len(v.shape) < 3:
-                #         v = torch.unsqueeze(v, axis=1)
-                #     expert_batch[k] = v
-                # reshape batch
-                # for k, v in batch.items():
-                #     v = torch.unsqueeze(v, axis=1)
-                #     if len(v.shape) < 3:
-                #         v = torch.unsqueeze(v, axis=1)
-                #     batch[k] = v
+
+                batch = replay_buffer.sample_n(FLAGS.batch_size//2, max_steps)
+                expert_batch = expert_buffer.sample_n(FLAGS.batch_size//2, max_steps)
+
+                if FLAGS.dt_feat:
+                    norm_dt_80 = (80 - np.mean(dts)) / np.std(dts)
+                    norm_dt_40 = (40 - np.mean(dts)) / np.std(dts)
+                    dt_feat_80 = np.ones((per_dataset_batch_size, max_steps, 1))*norm_dt_80
+                    dt_feat_40 = np.ones((per_dataset_batch_size, max_steps, 1))*norm_dt_40
+                    batch['observations'] = np.concatenate([
+                        batch['observations'], dt_feat_80], axis=2
+                    ).astype(np.float32)
+                    batch['next_observations'] = np.concatenate([
+                        batch['next_observations'], dt_feat_80], axis=2
+                    ).astype(np.float32)
+                    expert_batch['observations'] = np.concatenate([
+                        expert_batch['observations'], dt_feat_40], axis=2
+                    ).astype(np.float32)
+                    expert_batch['next_observations'] = np.concatenate([
+                        expert_batch['next_observations'], dt_feat_40], axis=2
+                    ).astype(np.float32)
+
+                batch = batch_to_torch(batch, FLAGS.device)
+                expert_batch = batch_to_torch(expert_batch, FLAGS.device)
+
                 # concatenate batches
                 mix_batch = {}
                 for k in batch.keys():
