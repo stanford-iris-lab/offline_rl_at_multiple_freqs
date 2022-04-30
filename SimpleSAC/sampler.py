@@ -1,6 +1,8 @@
+import os
 import numpy as np
+import torch
 
-from .utils import vid_from_frames
+from .utils import vid_from_frames, plot_q_over_traj
 
 class StepSampler(object):
 
@@ -61,7 +63,7 @@ class TrajSampler(object):
         self.max_traj_length = max_traj_length
         self._env = env
 
-    def sample(self, policy, n_trajs, dt_feat, dt, deterministic=False, replay_buffer=None, video=False, output_file=''):
+    def sample(self, policy, n_trajs, dt_feat, dt, deterministic=False, replay_buffer=None, video=False, output_file='', qs=None):
         trajs = []
         for traj in range(n_trajs):
             observations = []
@@ -146,6 +148,15 @@ class TrajSampler(object):
             if video and traj == 0:
                 imgs = np.stack(imgs, axis=0)
                 vid_from_frames(imgs, output_file)
+                file_path_stem = os.path.splitext(output_file)[0]
+                if qs:
+                    q_estimates = []
+                    for q in qs:
+                        q_estimates.append(
+                            q(torch.Tensor(observations).cuda(),
+                            torch.Tensor(actions).cuda()).cpu().detach().numpy())
+                    plot_q_over_traj(
+                        q_estimates, rewards, imgs, f'{file_path_stem}_q.jpg')
 
         return trajs
 
