@@ -205,7 +205,7 @@ class TwoHeadedTanhGaussianPolicy(nn.Module):
     def log_prob(self, observations, actions, use_second_head=True):
         if actions.ndim == 3:
             observations = extend_and_repeat(observations, 1, actions.shape[1])
-        base_network_output = self.base_network(observations, use_second_head=True)
+        base_network_output = self.base_network(observations, use_second_head=use_second_head)
         mean, log_std = torch.split(base_network_output, self.action_dim, dim=-1)
         log_std = self.log_std_multiplier() * log_std + self.log_std_offset()
         return self.tanh_gaussian.log_prob(mean, log_std, actions)
