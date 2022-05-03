@@ -122,8 +122,10 @@ def main(argv):
         )
         pretrained_weights = cql.policy.state_dict()
         pretrained_weights['base_network.last_fc.weight'] = pretrained_weights.pop('base_network.network.4.weight')
+        pretrained_weights['base_network.last_fc_1.weight'] = pretrained_weights['base_network.last_fc.weight'].clone()
         pretrained_weights['base_network.last_fc.bias'] = pretrained_weights.pop('base_network.network.4.bias')
-        policy.load_state_dict(pretrained_weights, strict=False)
+        pretrained_weights['base_network.last_fc_1.bias'] = pretrained_weights['base_network.last_fc.bias'].clone()
+        policy.load_state_dict(pretrained_weights)
 
         qf1 = FullyConnectedQFunction(
             obs_shape,
