@@ -50,11 +50,9 @@ FLAGS_DEF = define_flags_with_default(
     N_steps=.02,
     # N_datapoints=250000,
     dt_feat=True,
-    use_pretrained_q_target=False,
     pretrained_target_path='',
     shared_q_target=False,
     max_q_target=False,
-    # use_pretrained_q_target=True,
     # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.02/aec001f95d094fa598456707e8c81814/',
 
     cql=ConservativeSAC.get_default_config(),
@@ -218,22 +216,13 @@ def main(argv):
             orthogonal_init=FLAGS.orthogonal_init,
         )
 
-        if FLAGS.use_pretrained_q_target:
-            # pretrained_target_path = '/iris/u/kayburns/continuous-rl/CQL/experiments/pendulum/mix_pcond/ad794d1af211434f9cab06cfd0784b5f/'
-            loaded_model = wandb_logger.load_pickle(FLAGS.pretrained_target_path)
-            print(f"Loaded model from epoch {loaded_model['epoch']}")
-            sac = loaded_model['sac']
-            target_qf1 = sac.target_qf1
-            target_qf2 = sac.target_qf2
-        else:
-            target_qf1 = deepcopy(qf1)
-            target_qf2 = deepcopy(qf2)
+        target_qf1 = deepcopy(qf1)
+        target_qf2 = deepcopy(qf2)
 
         if FLAGS.cql.target_entropy >= 0.0:
             FLAGS.cql.target_entropy = -np.prod(action_shape).item()
 
-        update_target = not FLAGS.use_pretrained_q_target
-        sac = ConservativeSAC(FLAGS.cql, policy, qf1, qf2, target_qf1, target_qf2, update_target=update_target)
+        sac = ConservativeSAC(FLAGS.cql, policy, qf1, qf2, target_qf1, target_qf2)
     sac.torch_to_device(FLAGS.device)
 
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
@@ -253,9 +242,11 @@ def main(argv):
                 for dt in dts:
                     # batch_dt is N, 1, D
                     if dt == 40 or True:
+                        # assert 'kitchen' in FLAGS.env
                         batch_dt = subsample_flat_batch_n(
                             datasets[dt], per_dataset_batch_size, max_steps)
                     else:
+                        assert 'pendulum' in FLAGS.env
                         batch_dt = subsample_batch(
                             datasets[dt], per_dataset_batch_size)
                         # batch_dt = subsample_batch_n(
@@ -285,7 +276,7 @@ def main(argv):
                     batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
                 discount_arr = torch.Tensor([FLAGS.cql.discount ** (dt/max(dts)) for dt in dts]).cuda()
                 discount_arr =  discount_arr.repeat_interleave(per_dataset_batch_size)
-                metrics.update(prefix_metrics(sac.train(batch, n_steps, discount_arr, FLAGS.max_q_target), 'sac'))
+                metrics.update(prefix_metrics(sac.train(batch, discount_arr), 'sac'))
 
         with Timer() as eval_timer:
             for dt, eval_sampler in eval_samplers.items():
