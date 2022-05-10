@@ -127,6 +127,11 @@ def main(argv):
         pretrained_weights['base_network.last_fc_1.bias'] = pretrained_weights['base_network.last_fc.bias'].clone()
         policy.load_state_dict(pretrained_weights)
 
+        # freeze all but last layer
+        # for name, param in policy.named_parameters():
+        #     if not 'fc_1' in name:
+        #         param.requires_grad = False
+
         qf1 = FullyConnectedQFunction(
             obs_shape,
             train_sampler.env.action_space.shape[0],
@@ -142,6 +147,7 @@ def main(argv):
 
         mix_sac = MixSAC(FLAGS.sac, policy, qf1, qf2, target_qf1, target_qf2)
         # mix_sac = MixSAC(FLAGS.sac, cql.policy, cql.qf1, cql.qf2, cql.target_qf1, cql.target_qf2)
+        mix_sac.policy_optimizer = cql.policy_optimizer
         policy = mix_sac.policy
     else:
         policy = TanhGaussianPolicy(
@@ -249,7 +255,7 @@ def main(argv):
                     metrics['final_state_success'] = np.mean([t['successes'][-1] for t in trajs])
 
                 if FLAGS.save_model:
-                    # if metrics['average_return'] >= 1:
+                    # if metrics['average_return'] >= 3.5:
                     #     file_name = f"model_r{metrics['average_return']}_epoch{epoch}"
                     # else:
                     #     file_name = 'model.pkl'
