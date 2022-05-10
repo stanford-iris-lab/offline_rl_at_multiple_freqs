@@ -131,6 +131,8 @@ class ConservativeSAC(object):
         target_q_values = target_q_values.reshape(batch_size, N)
         q_target = summed_reward + (1 - dones) * q_discounts * target_q_values
         max_n_q_target, max_n = q_target.max(1)
+        # max_n_q_target = q_target[:,3]
+        # max_n = 3
         qf1_loss = F.mse_loss(q1_pred, max_n_q_target.detach())
         qf2_loss = F.mse_loss(q2_pred, max_n_q_target.detach())
 
@@ -245,6 +247,12 @@ class ConservativeSAC(object):
             policy_loss=policy_loss.item(),
             qf1_loss=qf1_loss.item(),
             qf2_loss=qf2_loss.item(),
+            q_1=q_target[:,0].mean().item(),
+            q_2=q_target[:,1].mean().item(),
+            q_3=q_target[:,2].mean().item(),
+            q_4=q_target[:,3].mean().item(),
+            q_max=q_target.max(1)[0].mean().item(),
+            q_mean=q_target.mean().item(),
             alpha_loss=alpha_loss.item(),
             alpha=alpha.item(),
             average_qf1=q1_pred.mean().item(),
