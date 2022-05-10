@@ -245,7 +245,7 @@ def main(argv):
                 output_file = os.path.join(wandb_logger.config.output_dir, f'eval_{epoch}.gif')
                 trajs = eval_sampler.sample(
                     sampler_policy, FLAGS.eval_n_trajs, False, 0, deterministic=True,
-                    video=video, output_file=output_file
+                    video=video, output_file=output_file, qs=[mix_sac.qf1, mix_sac.qf2]
                 )
 
                 metrics['average_return'] = np.mean([np.sum(t['rewards']) for t in trajs])
