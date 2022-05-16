@@ -114,8 +114,8 @@ class MixSAC(object):
             self.qf1(observations, new_actions),
             self.qf2(observations, new_actions),
         )
-        policy_loss = (alpha*log_pi - q_new_actions).mean() * 1e-3
-        policy_loss += 1e2 * F.mse_loss(
+        policy_loss = (alpha*log_pi - q_new_actions).mean()
+        policy_loss += 10 * F.mse_loss(
             new_actions*demo_mask.reshape(-1, 1),
             actions*demo_mask.reshape(-1, 1)) 
 

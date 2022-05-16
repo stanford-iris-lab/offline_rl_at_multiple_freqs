@@ -113,40 +113,40 @@ def main(argv):
             FLAGS.load_model_from_path)
         print(f"Loaded model from epoch {loaded_model['epoch']}")
         cql = loaded_model['sac']
-        policy = TwoHeadedTanhGaussianPolicy(
-            train_sampler.env.observation_space.shape[0],
-            train_sampler.env.action_space.shape[0],
-            FLAGS.policy_arch,
-            log_std_multiplier=FLAGS.policy_log_std_multiplier,
-            log_std_offset=FLAGS.policy_log_std_offset,
-        )
-        pretrained_weights = cql.policy.state_dict()
-        pretrained_weights['base_network.last_fc.weight'] = pretrained_weights.pop('base_network.network.4.weight')
-        pretrained_weights['base_network.last_fc_1.weight'] = pretrained_weights['base_network.last_fc.weight'].clone()
-        pretrained_weights['base_network.last_fc.bias'] = pretrained_weights.pop('base_network.network.4.bias')
-        pretrained_weights['base_network.last_fc_1.bias'] = pretrained_weights['base_network.last_fc.bias'].clone()
-        policy.load_state_dict(pretrained_weights)
+        # policy = TwoHeadedTanhGaussianPolicy(
+        #     train_sampler.env.observation_space.shape[0],
+        #     train_sampler.env.action_space.shape[0],
+        #     FLAGS.policy_arch,
+        #     log_std_multiplier=FLAGS.policy_log_std_multiplier,
+        #     log_std_offset=FLAGS.policy_log_std_offset,
+        # )
+        # pretrained_weights = cql.policy.state_dict()
+        # pretrained_weights['base_network.last_fc.weight'] = pretrained_weights.pop('base_network.network.4.weight')
+        # pretrained_weights['base_network.last_fc_1.weight'] = pretrained_weights['base_network.last_fc.weight'].clone()
+        # pretrained_weights['base_network.last_fc.bias'] = pretrained_weights.pop('base_network.network.4.bias')
+        # pretrained_weights['base_network.last_fc_1.bias'] = pretrained_weights['base_network.last_fc.bias'].clone()
+        # policy.load_state_dict(pretrained_weights)
 
         # freeze all but last layer
         # for name, param in policy.named_parameters():
         #     if not 'fc_1' in name:
         #         param.requires_grad = False
 
-        qf1 = FullyConnectedQFunction(
-            obs_shape,
-            train_sampler.env.action_space.shape[0],
-            FLAGS.qf_arch
-        )
-        target_qf1 = deepcopy(qf1)
-        qf2 = FullyConnectedQFunction(
-            obs_shape,
-            train_sampler.env.action_space.shape[0],
-            FLAGS.qf_arch
-        )
-        target_qf2 = deepcopy(qf2)
+        # qf1 = FullyConnectedQFunction(
+        #     obs_shape,
+        #     train_sampler.env.action_space.shape[0],
+        #     FLAGS.qf_arch
+        # )
+        # target_qf1 = deepcopy(qf1)
+        # qf2 = FullyConnectedQFunction(
+        #     obs_shape,
+        #     train_sampler.env.action_space.shape[0],
+        #     FLAGS.qf_arch
+        # )
+        # target_qf2 = deepcopy(qf2)
 
-        mix_sac = MixSAC(FLAGS.sac, policy, qf1, qf2, target_qf1, target_qf2)
-        # mix_sac = MixSAC(FLAGS.sac, cql.policy, cql.qf1, cql.qf2, cql.target_qf1, cql.target_qf2)
+        # mix_sac = MixSAC(FLAGS.sac, policy, qf1, qf2, target_qf1, target_qf2)
+        mix_sac = MixSAC(FLAGS.sac, cql.policy, cql.qf1, cql.qf2, cql.target_qf1, cql.target_qf2)
         mix_sac.policy_optimizer = cql.policy_optimizer
         policy = mix_sac.policy
     else:
@@ -182,6 +182,8 @@ def main(argv):
     viskit_metrics = {}
     dts = [80, 40] # we load the replay buffer in first
     per_dataset_batch_size = FLAGS.batch_size // len(dts)
+    norm_dt_80 = (80 - np.mean(dts)) / np.std(dts)
+    norm_dt_40 = (40 - np.mean(dts)) / np.std(dts)
     for epoch in range(FLAGS.n_epochs):
         metrics = {}
         with Timer() as rollout_timer:
@@ -201,8 +203,6 @@ def main(argv):
                 expert_batch = expert_buffer.sample_n(FLAGS.batch_size//2, max_steps)
 
                 if FLAGS.dt_feat:
-                    norm_dt_80 = (80 - np.mean(dts)) / np.std(dts)
-                    norm_dt_40 = (40 - np.mean(dts)) / np.std(dts)
                     dt_feat_80 = np.ones((per_dataset_batch_size, max_steps, 1))*norm_dt_80
                     dt_feat_40 = np.ones((per_dataset_batch_size, max_steps, 1))*norm_dt_40
                     batch['observations'] = np.concatenate([
@@ -244,7 +244,7 @@ def main(argv):
                 video = epoch == 0 or (epoch + 1) % (FLAGS.eval_period * 10) == 0
                 output_file = os.path.join(wandb_logger.config.output_dir, f'eval_{epoch}.gif')
                 trajs = eval_sampler.sample(
-                    sampler_policy, FLAGS.eval_n_trajs, False, 0, deterministic=True,
+                    sampler_policy, FLAGS.eval_n_trajs, FLAGS.dt_feat, norm_dt_80, deterministic=True,
                     video=video, output_file=output_file, qs=[mix_sac.qf1, mix_sac.qf2]
                 )
 

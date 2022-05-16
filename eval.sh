@@ -18,7 +18,7 @@ export MJLIB_PATH=/sailhome/kayburns/anaconda3/envs/py3.7_torch1.8/lib/python3.7
 
 Xvfb :0 &
 MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.sac_main \
-  --logging.output_dir "./debug/0303f0c18c494c56aa7dda17218cb3f7" \
+  --logging.output_dir "./debug/compare_80/03aacbc989474a0892800bb34a9d0bcf/" \
   --logging.online False \
   --env "kitchen-complete-v0" \
   --dt 80 \
@@ -28,5 +28,5 @@ MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.sac_main \
   --n_train_step_per_epoch 0 \
   --n_epochs 1 \
   --eval_n_trajs 1 \
-  --load_model_from_path "/iris/u/kayburns/continuous-rl/CQL/experiments/mujoco/kitchen-complete-v0/efc0f5d5c6444833a8089e1d879601b3/model_r3.5999999046325684_epoch359.pkl" \
+  --load_model_from_path "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/03aacbc989474a0892800bb34a9d0bcf/model_r3.799999952316284_epoch149.pkl" \
   --save_model False

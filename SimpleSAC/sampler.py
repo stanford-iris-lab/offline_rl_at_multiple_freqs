@@ -24,18 +24,21 @@ class StepSampler(object):
             observation = self._current_observation
             action = policy(
                 np.expand_dims(observation, 0), deterministic=deterministic
-            )[0, :]
+            # )[0, :]
+            )[0, :] / 2
             next_observation, reward, done, _ = self.env.step(action)
             # reward = reward * (fs/10)
             observations.append(observation)
-            actions.append(action)
+            # actions.append(action)
+            actions.append(action*2)
             rewards.append(reward)
             dones.append(done)
             next_observations.append(next_observation)
 
             if replay_buffer is not None:
                 replay_buffer.add_sample(
-                    observation, action, reward, next_observation, done
+                    # observation, action, reward, next_observation, done
+                    observation, action*2, reward, next_observation, done
                 )
 
             self._current_observation = next_observation
@@ -81,12 +84,11 @@ class TrajSampler(object):
             # import pickle
             # old_actions = pickle.load(open('actions.pkl', 'rb'))
             for _ in range(self.max_traj_length):
-                if dt_feat:
-                    observation = np.hstack([
-                        observation, [dt]]).astype(np.float32)
                 action = policy(
                     np.expand_dims(observation, 0), deterministic=deterministic
                 )[0, :]
+                action = action/2
+                # action = action
                 # if you want to test action repeats, uncomment
                 # if _ % 10 == 0:
                 #     action = policy(
@@ -103,8 +105,12 @@ class TrajSampler(object):
                 #     action = action
                 #     print(action, _)
                 next_observation, reward, done, info = self.env.step(action)
+                if dt_feat:
+                    observation = np.hstack([
+                        observation, [dt]]).astype(np.float32)
                 observations.append(observation)
-                actions.append(action)
+                # actions.append(action)
+                actions.append(action*2)
                 rewards.append(reward)
                 dones.append(done)
                 if 'score' in info:
@@ -125,7 +131,8 @@ class TrajSampler(object):
 
                 if replay_buffer is not None:
                     replay_buffer.add_sample(
-                        observation, action, reward, next_observation, done
+                        # observation, action, reward, next_observation, done
+                        observation, action*2, reward, next_observation, done
                     )
 
                 observation = next_observation
