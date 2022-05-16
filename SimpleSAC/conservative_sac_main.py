@@ -14,7 +14,7 @@ import absl.app
 import absl.flags
 
 from .conservative_sac import ConservativeSAC
-from .replay_buffer import batch_to_torch, subsample_batch_n, subsample_flat_batch_n, load_dataset, load_d4rl_dataset
+from .replay_buffer import batch_to_torch, subsample_batch, subsample_flat_batch_n, load_dataset, load_d4rl_dataset
 from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
 from .sampler import TrajSampler
 from .utils import *
@@ -49,12 +49,10 @@ FLAGS_DEF = define_flags_with_default(
     visualize_traj=False,
     # N_steps=.02,
     # N_datapoints=250000,
-    dt_feat=False,
-    use_pretrained_q_target=False,
+    dt_feat=True,
     pretrained_target_path='',
     shared_q_target=False,
     max_q_target=False,
-    # use_pretrained_q_target=True,
     # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.02/aec001f95d094fa598456707e8c81814/',
 
     cql=ConservativeSAC.get_default_config(),
@@ -108,7 +106,11 @@ def main(argv):
             env.dt = dt
             eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), FLAGS.max_traj_length)
             # eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), int(100 * (1/dt)))
-            dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py")
+            if dt == .005 or dt == .01:
+                half_angle = True
+            else:
+                half_angle = False
+            dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py", half_angle=half_angle)
             dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
             datasets[dt] = dataset
     elif "door-open-v2-goal-observable" in FLAGS.env:
@@ -156,6 +158,7 @@ def main(argv):
             dataset = load_dataset(buffers[dt])
             if FLAGS.sparse:
                 dataset['rewards'] = (dataset['rewards'] == 10.0 * (dt/10)).astype('float32')
+            dataset['rewards'] = dataset['rewards'] * (dt/.02)
             datasets[dt] = dataset
     elif 'kitchen' in FLAGS.env:
         datasets, eval_samplers = {}, {}
@@ -213,28 +216,19 @@ def main(argv):
             orthogonal_init=FLAGS.orthogonal_init,
         )
 
-        if FLAGS.use_pretrained_q_target:
-            # pretrained_target_path = '/iris/u/kayburns/continuous-rl/CQL/experiments/pendulum/mix_pcond/ad794d1af211434f9cab06cfd0784b5f/'
-            loaded_model = wandb_logger.load_pickle(FLAGS.pretrained_target_path)
-            print(f"Loaded model from epoch {loaded_model['epoch']}")
-            sac = loaded_model['sac']
-            target_qf1 = sac.target_qf1
-            target_qf2 = sac.target_qf2
-        else:
-            target_qf1 = deepcopy(qf1)
-            target_qf2 = deepcopy(qf2)
+        target_qf1 = deepcopy(qf1)
+        target_qf2 = deepcopy(qf2)
 
         if FLAGS.cql.target_entropy >= 0.0:
             FLAGS.cql.target_entropy = -np.prod(action_shape).item()
 
-        update_target = not FLAGS.use_pretrained_q_target
-        sac = ConservativeSAC(FLAGS.cql, policy, qf1, qf2, target_qf1, target_qf2, update_target=update_target)
+        sac = ConservativeSAC(FLAGS.cql, policy, qf1, qf2, target_qf1, target_qf2)
     sac.torch_to_device(FLAGS.device)
 
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
 
     viskit_metrics = {}
-    dts = list(eval_samplers.keys())
+    dts = sorted(list(eval_samplers.keys()))
     for epoch in range(FLAGS.n_epochs):
         metrics = {'epoch': epoch}
 
@@ -246,13 +240,17 @@ def main(argv):
                 # max_steps = int(FLAGS.N_steps / min(dts))
                 max_steps = 1
                 for dt in dts:
-                    # batch_dt is B, N, D
-                    if dt == 40:
+                    # batch_dt is N, 1, D
+                    if dt == 40 or True:
+                        # assert 'kitchen' in FLAGS.env
                         batch_dt = subsample_flat_batch_n(
                             datasets[dt], per_dataset_batch_size, max_steps)
                     else:
-                        batch_dt = subsample_batch_n(
-                            datasets[dt], per_dataset_batch_size, max_steps)
+                        assert 'pendulum' in FLAGS.env
+                        batch_dt = subsample_batch(
+                            datasets[dt], per_dataset_batch_size)
+                        # batch_dt = subsample_batch_n(
+                        #     datasets[dt], per_dataset_batch_size, max_steps)
                     if FLAGS.dt_feat:
                         dt_feat = np.ones((per_dataset_batch_size, max_steps, 1))*dt
                         norm_dt = (dt_feat - np.mean(dts)) / np.std(dts)
@@ -276,7 +274,9 @@ def main(argv):
                 if FLAGS.shared_q_target:
                     # batch['next_observations'][:,(n_steps-1).long(),-1] = max(dts)
                     batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
-                metrics.update(prefix_metrics(sac.train(batch, n_steps, FLAGS.max_q_target), 'sac'))
+                discount_arr = torch.Tensor([FLAGS.cql.discount ** (dt/max(dts)) for dt in dts]).cuda()
+                discount_arr =  discount_arr.repeat_interleave(per_dataset_batch_size)
+                metrics.update(prefix_metrics(sac.train(batch, discount_arr, n_steps), 'sac'))
 
         with Timer() as eval_timer:
             for dt, eval_sampler in eval_samplers.items():

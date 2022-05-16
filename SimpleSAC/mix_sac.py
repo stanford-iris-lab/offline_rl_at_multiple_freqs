@@ -85,14 +85,16 @@ class MixSAC(object):
         soft_target_update(self.qf1, self.target_qf1, soft_target_update_rate)
         soft_target_update(self.qf2, self.target_qf2, soft_target_update_rate)
     
-    def train(self, batch, demo_mask, n_steps, discount_arr, max_q_target=False):
+    def train(self, batch, demo_mask, discount_arr, n_steps):
         self._total_steps += 1
+        batch_size, N, _ = batch['observations'].shape
+        n_steps = n_steps.long()-1
 
         observations = batch['observations'][:,0,:]
         actions = batch['actions'][:,0,:]
-        rewards = batch['rewards']
-        next_observations = batch['next_observations']
-        dones = batch['dones']
+        rewards = batch['rewards'].squeeze()
+        next_observations = batch['next_observations'].reshape(batch_size*N, -1)
+        dones = batch['dones'].squeeze()
         replay_mask = torch.logical_not(demo_mask)
 
         new_actions_demo, log_pi_demo = self.policy(
@@ -119,66 +121,45 @@ class MixSAC(object):
             new_actions*demo_mask.reshape(-1, 1),
             actions*demo_mask.reshape(-1, 1)) 
 
-        next_idx = np.vstack(
-            (np.arange(observations.shape[0]), (n_steps-1).long()))
         """ Q function loss """
         q1_pred = self.qf1(observations, actions)
         q2_pred = self.qf2(observations, actions)
 
         new_next_actions_demo, next_log_pi_demo = self.policy(
-            next_observations[next_idx][:,:-1], use_second_head=False)
+            next_observations[:,:-1], use_second_head=False)
         new_next_actions_replay, next_log_pi_replay = self.policy(
-            next_observations[next_idx][:,:-1], use_second_head=True)
-        new_next_actions = new_next_actions_demo*demo_mask.unsqueeze(1) + new_next_actions_replay*replay_mask.unsqueeze(1)
-        next_log_pi_demo = next_log_pi_demo*demo_mask + next_log_pi_replay*replay_mask
+            next_observations[:,:-1], use_second_head=True)
+        new_next_actions_demo = new_next_actions_demo*demo_mask.repeat_interleave(N).unsqueeze(1)
+        new_next_actions_replay = new_next_actions_replay*replay_mask.repeat_interleave(N).unsqueeze(1)
+        new_next_actions = new_next_actions_demo + new_next_actions_replay
+        next_log_pi = next_log_pi_demo*demo_mask.repeat_interleave(N) + next_log_pi_replay*replay_mask.repeat_interleave(N)
         
-        if self.update_target: 
-            if max_q_target:
-                target_obs = {}
-                dts = [1, 2, 5, 10]
-                for dt in dts:
-                    target_obs[dt] = next_observations.clone()
-                    target_obs[dt][:,:,-1] = (dt - np.mean(dts)) / np.std(dts)
-                debug = self.target_qf1(target_obs[1][next_idx], new_next_actions) 
-                all_qf1s = torch.vstack(
-                        [self.target_qf1(target_obs[dt][next_idx], new_next_actions) for dt in dts])
-                all_qf2s = torch.vstack(
-                        [self.target_qf2(target_obs[dt][next_idx], new_next_actions) for dt in dts])
-                target_q_values = torch.min(
-                    torch.max(all_qf1s, dim=0).values,
-                    torch.max(all_qf2s, dim=0).values,
-                )
-            else:
-               target_q_values = torch.min(
-                    self.target_qf1(next_observations[next_idx], new_next_actions),
-                    self.target_qf2(next_observations[next_idx], new_next_actions),
-                )
-        else:
-            # our target q-value doesn't use dt_feat
-            target_q_values = torch.min(
-                self.target_qf1(next_observations[next_idx][:,:-1], new_next_actions),
-                self.target_qf2(next_observations[next_idx][:,:-1], new_next_actions),
-            )
+        target_q_values = torch.min(
+            self.target_qf1(next_observations, new_next_actions),
+            self.target_qf2(next_observations, new_next_actions),
+        )
 
         if self.config.backup_entropy:
             target_q_values = target_q_values - alpha * next_log_pi
 
-        max_n = int(n_steps.max())
-        batch_size = rewards.shape[0]
-        discounts = torch.stack([discount_arr**i for i in range(max_n)], axis=1)
-        pre_mask = torch.repeat_interleave(torch.arange(max_n), batch_size).reshape((-1, batch_size)).T # :(
-        mask = (pre_mask <= (n_steps - 1).reshape(-1, 1)).cuda()
-        summed_reward = torch.sum(rewards.squeeze(dim=2)*discounts*mask, axis=1)
-        q_target = summed_reward + (1. - dones[next_idx]).squeeze() * (discount_arr**(n_steps.cuda())) * target_q_values
-        qf1_loss = F.mse_loss(q1_pred, q_target.detach())
-        qf2_loss = F.mse_loss(q2_pred, q_target.detach())
+        # discount_arr[i] = gamma -> discounts[i,:] = [gamma^0, ..., gamma^N]
+        step_discounts = torch.stack([discount_arr**i for i in range(N)], axis=1)
+        # summed_reward[:,j] = sum_{t=1..j} r(s_t, a_t)
+        summed_reward = (rewards*step_discounts).cumsum(1)
+        q_discounts = discount_arr.unsqueeze(1) * step_discounts
+        target_q_values = target_q_values.reshape(batch_size, N)
+        q_target = summed_reward + (1 - dones) * q_discounts * target_q_values
+        # max_n_q_target, max_n = q_target.max(1)
+        n_q_target = q_target[np.arange(batch_size),n_steps]
+        qf1_loss = F.mse_loss(q1_pred, n_q_target.detach())
+        qf2_loss = F.mse_loss(q2_pred, n_q_target.detach())
 
 
         ### CQL
         if not self.config.use_cql:
             qf_loss = qf1_loss + qf2_loss
         else:
-            next_observations = batch['next_observations'][next_idx].squeeze() # TODO. should this be the n-step next or just next
+            next_observations = batch['next_observations'][np.arange(batch_size), n_steps].squeeze() # TODO. should this be the n-step next or just next
             batch_size = actions.shape[0]
             action_dim = actions.shape[-1]
             cql_random_actions = actions.new_empty((batch_size, self.config.cql_n_actions, action_dim), requires_grad=False).uniform_(-1, 1)

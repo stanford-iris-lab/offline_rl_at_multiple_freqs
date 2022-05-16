@@ -26,3 +26,4 @@ for cql_min_q_weight in ${cql_min_q_weights[@]} ; do
         done
     done
 done
+                        # sbatch run.sh ${cql_min_q_weight} ${policy_lr} ${qf_lr} 0 ${discount} 500 ${seed} ${env}

@@ -234,10 +234,10 @@ def main(argv):
                 discount_arr =  discount_arr.repeat_interleave(per_dataset_batch_size)
                 if batch_idx + 1 == FLAGS.n_train_step_per_epoch:
                     metrics.update(
-                        prefix_metrics(mix_sac.train(mix_batch, demo_mask, n_steps, discount_arr, False), 'mix_sac')
+                        prefix_metrics(mix_sac.train(mix_batch, demo_mask, discount_arr, n_steps), 'mix_sac')
                     )
                 else:
-                    mix_sac.train(mix_batch, demo_mask, n_steps, discount_arr, False)
+                    mix_sac.train(mix_batch, demo_mask, discount_arr, n_steps)
 
         with Timer() as eval_timer:
             if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
