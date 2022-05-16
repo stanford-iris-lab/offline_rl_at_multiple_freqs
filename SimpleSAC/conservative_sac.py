@@ -40,14 +40,13 @@ class ConservativeSAC(object):
             config.update(ConfigDict(updates).copy_and_resolve_references())
         return config
 
-    def __init__(self, config, policy, qf1, qf2, target_qf1, target_qf2, update_target=True):
+    def __init__(self, config, policy, qf1, qf2, target_qf1, target_qf2):
         self.config = ConservativeSAC.get_default_config(config)
         self.policy = policy
         self.qf1 = qf1
         self.qf2 = qf2
         self.target_qf1 = target_qf1
         self.target_qf2 = target_qf2
-        self.update_target = update_target
 
         optimizer_class = {
             'adam': torch.optim.Adam,
@@ -77,22 +76,22 @@ class ConservativeSAC(object):
                 lr=self.config.qf_lr,
             )
 
-        if self.update_target:
-            self.update_target_network(1.0)
+        self.update_target_network(1.0)
         self._total_steps = 0
 
     def update_target_network(self, soft_target_update_rate):
         soft_target_update(self.qf1, self.target_qf1, soft_target_update_rate)
         soft_target_update(self.qf2, self.target_qf2, soft_target_update_rate)
 
-    def train(self, batch, n_steps, max_q_target=False):
+    def train(self, batch, discount_arr):
         self._total_steps += 1
+        batch_size, N, _ = batch['observations'].shape
 
         observations = batch['observations'][:,0,:]
         actions = batch['actions'][:,0,:]
-        rewards = batch['rewards']
-        next_observations = batch['next_observations']
-        dones = batch['dones']
+        rewards = batch['rewards'].squeeze()
+        next_observations = batch['next_observations'].reshape(batch_size*N, -1)
+        dones = batch['dones'].squeeze()
 
         new_actions, log_pi = self.policy(observations)
 
@@ -110,62 +109,38 @@ class ConservativeSAC(object):
         )
         policy_loss = (alpha*log_pi - q_new_actions).mean()
 
-        next_idx = np.vstack(
-            (np.arange(observations.shape[0]), (n_steps-1).long()))
         """ Q function loss """
         q1_pred = self.qf1(observations, actions)
         q2_pred = self.qf2(observations, actions)
 
-        new_next_actions, next_log_pi = self.policy(next_observations[next_idx])
-        if self.update_target: 
-            if max_q_target:
-                target_obs = {}
-                dts = [1, 2, 5, 10]
-                for dt in dts:
-                    target_obs[dt] = next_observations.clone()
-                    target_obs[dt][:,:,-1] = (dt - np.mean(dts)) / np.std(dts)
-                debug = self.target_qf1(target_obs[1][next_idx], new_next_actions) 
-                all_qf1s = torch.vstack(
-                        [self.target_qf1(target_obs[dt][next_idx], new_next_actions) for dt in dts])
-                all_qf2s = torch.vstack(
-                        [self.target_qf2(target_obs[dt][next_idx], new_next_actions) for dt in dts])
-                target_q_values = torch.min(
-                    torch.max(all_qf1s, dim=0).values,
-                    torch.max(all_qf2s, dim=0).values,
-                )
-            else:
-               target_q_values = torch.min(
-                    self.target_qf1(next_observations[next_idx], new_next_actions),
-                    self.target_qf2(next_observations[next_idx], new_next_actions),
-                )
-        else:
-            # our target q-value doesn't use dt_feat
-            target_q_values = torch.min(
-                self.target_qf1(next_observations[next_idx][:,:-1], new_next_actions),
-                self.target_qf2(next_observations[next_idx][:,:-1], new_next_actions),
-            )
+        new_next_actions, next_log_pi = self.policy(next_observations)
+        # shape: (B * max_N)
+        target_q_values = torch.min(
+            self.target_qf1(next_observations, new_next_actions),
+            self.target_qf2(next_observations, new_next_actions),
+        )
 
         if self.config.backup_entropy:
             target_q_values = target_q_values - alpha * next_log_pi
 
-        # q_target = rewards + (1. - dones) * self.config.discount * target_q_values
-        max_n = int(n_steps.max())
-        batch_size = rewards.shape[0]
-        discounts = torch.Tensor(
-            [self.config.discount**i for i in range(max_n)]).cuda()
-        pre_mask = torch.repeat_interleave(torch.arange(max_n), batch_size).reshape((-1, batch_size)).T # :(
-        mask = (pre_mask <= (n_steps - 1).reshape(-1, 1)).cuda()
-        summed_reward = torch.sum(rewards.squeeze(dim=2)*discounts*mask, axis=1)
-        q_target = summed_reward + (1. - dones[next_idx]).squeeze() * (self.config.discount**(n_steps)).cuda() * target_q_values
-        qf1_loss = F.mse_loss(q1_pred, q_target.detach())
-        qf2_loss = F.mse_loss(q2_pred, q_target.detach())
-
+        # discount_arr[i] = gamma -> discounts[i,:] = [gamma^0, ..., gamma^N]
+        step_discounts = torch.stack([discount_arr**i for i in range(N)], axis=1)
+        # summed_reward[:,j] = sum_{t=1..j} r(s_t, a_t)
+        summed_reward = (rewards*step_discounts).cumsum(1)
+        q_discounts = discount_arr.unsqueeze(1) * step_discounts
+        target_q_values = target_q_values.reshape(batch_size, N)
+        q_target = summed_reward + (1 - dones) * q_discounts * target_q_values
+        max_n_q_target, max_n = q_target.max(1)
+        # max_n_q_target = q_target[:,3]
+        # max_n = 3
+        qf1_loss = F.mse_loss(q1_pred, max_n_q_target.detach())
+        qf2_loss = F.mse_loss(q2_pred, max_n_q_target.detach())
 
         ### CQL
         if not self.config.use_cql:
             qf_loss = qf1_loss + qf2_loss
         else:
-            next_observations = batch['next_observations'][next_idx].squeeze() # TODO. should this be the n-step next or just next
+            next_observations = batch['next_observations'][np.arange(batch_size), max_n]
             batch_size = actions.shape[0]
             action_dim = actions.shape[-1]
             cql_random_actions = actions.new_empty((batch_size, self.config.cql_n_actions, action_dim), requires_grad=False).uniform_(-1, 1)
@@ -242,7 +217,7 @@ class ConservativeSAC(object):
         qf_loss.backward()
         self.qf_optimizer.step()
 
-        if self.total_steps % self.config.target_update_period == 0 and self.update_target:
+        if self.total_steps % self.config.target_update_period == 0:
             self.update_target_network(
                 self.config.soft_target_update_rate
             )
@@ -272,6 +247,12 @@ class ConservativeSAC(object):
             policy_loss=policy_loss.item(),
             qf1_loss=qf1_loss.item(),
             qf2_loss=qf2_loss.item(),
+            q_1=q_target[:,0].mean().item(),
+            q_2=q_target[:,1].mean().item(),
+            q_3=q_target[:,2].mean().item(),
+            q_4=q_target[:,3].mean().item(),
+            q_max=q_target.max(1)[0].mean().item(),
+            q_mean=q_target.mean().item(),
             alpha_loss=alpha_loss.item(),
             alpha=alpha.item(),
             average_qf1=q1_pred.mean().item(),
