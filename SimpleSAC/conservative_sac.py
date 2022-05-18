@@ -86,12 +86,13 @@ class ConservativeSAC(object):
     def train(self, batch, discount_arr, n_steps):
         self._total_steps += 1
         batch_size, N, _ = batch['observations'].shape
+        n_steps = n_steps.long()-1
 
         observations = batch['observations'][:,0,:]
         actions = batch['actions'][:,0,:]
-        rewards = batch['rewards'].squeeze()
+        rewards = batch['rewards'].squeeze(-1)
         next_observations = batch['next_observations'].reshape(batch_size*N, -1)
-        dones = batch['dones']
+        dones = batch['dones'].squeeze(-1)
 
         new_actions, log_pi = self.policy(observations)
 
@@ -107,8 +108,8 @@ class ConservativeSAC(object):
             self.qf1(observations, new_actions),
             self.qf2(observations, new_actions),
         )
-        # policy_loss = (alpha*log_pi - q_new_actions).mean()
-        policy_loss = F.mse_loss(new_actions, actions)
+        policy_loss = (alpha*log_pi - q_new_actions).mean()
+        # policy_loss = F.mse_loss(new_actions, actions)
 
         """ Q function loss """
         q1_pred = self.qf1(observations, actions)

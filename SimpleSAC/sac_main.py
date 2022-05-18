@@ -89,8 +89,8 @@ def main(argv):
         test_env.frame_skip = FLAGS.dt
         assert train_env.dt == FLAGS.dt * .002
         assert test_env.dt == FLAGS.dt * .002
-        train_sampler = StepSampler(train_env, FLAGS.max_traj_length)
-        eval_sampler = TrajSampler(test_env, FLAGS.max_traj_length)
+        train_sampler = StepSampler(train_env, FLAGS.max_traj_length, action_scale=FLAGS.dt/40)
+        eval_sampler = TrajSampler(test_env, FLAGS.max_traj_length, action_scale=FLAGS.dt/40)
     else:
         train_sampler = StepSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)

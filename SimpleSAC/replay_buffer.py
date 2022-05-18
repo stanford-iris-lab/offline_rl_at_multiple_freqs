@@ -145,7 +145,7 @@ def load_d4rl_dataset(env):
         dones=dataset['terminals'].astype(np.float32),
     )
 
-def load_dataset(h5path, half_angle=False):
+def load_pendulum_dataset(h5path, half_angle=False):
     dataset_file = h5py.File(h5path, "r")
     dataset = dict(
         observations=dataset_file["obs"][:].astype(np.float32),
@@ -174,6 +174,19 @@ def load_dataset(h5path, half_angle=False):
         if half_angle:
             v = v[mask]
         dataset[k] = v
+    return dataset
+
+def load_kitchen_dataset(h5path):
+    dataset_file = h5py.File(h5path, "r")
+    dataset = dict(
+        observations=dataset_file["obs"][:].astype(np.float32),
+        actions=dataset_file["actions"][:].astype(np.float32),
+        next_observations=dataset_file["next_obs"][:].astype(np.float32),
+        rewards=dataset_file["rewards"][:].astype(np.float32),
+        dones=dataset_file["dones"][:].astype(np.float32),
+    )
+    for k, v in dataset.items():
+        v = v[:500000] # all of the mujoco buffers are empty after 500k
     return dataset
 
 def index_batch(batch, indices):
