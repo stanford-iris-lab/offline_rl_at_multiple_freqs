@@ -14,7 +14,7 @@ import absl.app
 import absl.flags
 
 from .conservative_sac import ConservativeSAC
-from .replay_buffer import batch_to_torch, subsample_batch, subsample_flat_batch_n, load_dataset, load_d4rl_dataset
+from .replay_buffer import *
 from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
 from .sampler import TrajSampler
 from .utils import *
@@ -47,7 +47,7 @@ FLAGS_DEF = define_flags_with_default(
     eval_n_trajs=5,
     load_model='',
     visualize_traj=False,
-    N_steps=.02,
+    N_steps=0,
     # N_datapoints=250000,
     dt_feat=True,
     pretrained_target_path='',
@@ -75,31 +75,7 @@ def main(argv):
 
     set_random_seed(FLAGS.seed)
 
-    if "walker_" in FLAGS.env:
-        eval_samplers = {}
-        eval_samplers[.005] = TrajSampler(Walker(.005))
-        eval_samplers[.02] = TrajSampler(Walker(.02))
-        eval_samplers[.01] = TrajSampler(Walker(.01))
-        # eval_samplers[.005] = TrajSampler(Walker(.005), int(100 * (1/.005)))
-        # eval_samplers[.02] = TrajSampler(Walker(.02), int(100 * (1/.02)))
-        # eval_samplers[.01] = TrajSampler(Walker(.01), int(100 * (1/.01)))
-
-        datasets = {}
-        for dt in [.01, .02, .005]:
-            dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/bipedal_walker/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py")
-            dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
-            datasets[dt] = dataset
-
-        # dts = [float(x) for x in FLAGS.env.split('_')[1:]]
-        # eval_samplers = {}
-        # datasets = {}
-        # for dt in dts:
-        #     max_traj_length = (1 / dt) * FLAGS.max_traj_length
-        #     eval_samplers[dt] = TrajSampler(Walker(dt), max_traj_length)
-        #     dataset = load_dataset(FLAGS.cql.buffer_file.format(dt))
-        #     dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
-        #     datasets[dt] = dataset
-    elif "pendulum_" in FLAGS.env:
+    if "pendulum_" in FLAGS.env:
         datasets, eval_samplers = {}, {}
         for dt in [.01, .02, .005]:
             env = gym.make('Pendulum-v1').unwrapped
@@ -110,7 +86,9 @@ def main(argv):
                 half_angle = True
             else:
                 half_angle = False
-            dataset = load_dataset(f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py", half_angle=half_angle)
+            dataset = load_pendulum_dataset(
+                f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py",
+                half_angle=half_angle)
             dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
             datasets[dt] = dataset
     elif "door-open-v2-goal-observable" in FLAGS.env:
@@ -164,22 +142,20 @@ def main(argv):
         datasets, eval_samplers = {}, {}
         env = gym.make(FLAGS.env)
         datasets[40] = load_d4rl_dataset(env)
-        # datasets[80] = load_dataset(
-        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/6027408585064c61bf5b356b14f96607/buffer.h5py')
+        datasets[80] = load_kitchen_dataset(
+            '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/2ad22ec184eb4fb5b242ee5315b4cc0b/buffer.h5py')
         
         env40 = gym.make(FLAGS.env)
         assert env40.dt == 40 * .002
         eval_samplers[40] = TrajSampler(env40.unwrapped, FLAGS.max_traj_length)
 
-        # env80 = gym.make(FLAGS.env)
-        # env80.frame_skip = 80
-        # env80.dt = 80 * .002
-        # assert env80.dt == 80 * .002
-        # eval_samplers[80] = TrajSampler(env80.unwrapped, FLAGS.max_traj_length)
+        env80 = gym.make(FLAGS.env)
+        env80.frame_skip = 80
+        env80.dt = 80 * .002
+        assert env80.dt == 80 * .002
+        eval_samplers[80] = TrajSampler(env80.unwrapped, FLAGS.max_traj_length, action_scale=2.0)
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
-
-    # dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
 
     if FLAGS.load_model:
         loaded_model = wandb_logger.load_pickle(FLAGS.load_model)
@@ -237,20 +213,14 @@ def main(argv):
                 per_dataset_batch_size = int(FLAGS.batch_size / len(dts))
 
                 batch_dts = []
-                max_steps = int(FLAGS.N_steps / min(dts))
-                # max_steps = 1
+                if FLAGS.N_steps:
+                    max_steps = int(FLAGS.N_steps / min(dts))
+                else:
+                    max_steps = 1
                 for dt in dts:
                     # batch_dt is N, 1, D
-                    if dt == 40 or True:
-                        # assert 'kitchen' in FLAGS.env
-                        batch_dt = subsample_flat_batch_n(
-                            datasets[dt], per_dataset_batch_size, max_steps)
-                    else:
-                        assert 'pendulum' in FLAGS.env
-                        batch_dt = subsample_batch(
-                            datasets[dt], per_dataset_batch_size)
-                        # batch_dt = subsample_batch_n(
-                        #     datasets[dt], per_dataset_batch_size, max_steps)
+                    batch_dt = subsample_flat_batch_n(
+                        datasets[dt], per_dataset_batch_size, max_steps)
                     if FLAGS.dt_feat:
                         dt_feat = np.ones((per_dataset_batch_size, max_steps, 1))*dt
                         norm_dt = (dt_feat - np.mean(dts)) / np.std(dts)
@@ -267,16 +237,17 @@ def main(argv):
                 for k in batch_dts[0].keys():
                     batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
-                n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
-                # n_steps = torch.Tensor([1 for dt in dts])
+                if FLAGS.N_steps:
+                    n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
+                else:
+                    n_steps = torch.Tensor([1 for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
                 if FLAGS.shared_q_target:
-                    # batch['next_observations'][:,(n_steps-1).long(),-1] = max(dts)
                     batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
                 discount_arr = torch.Tensor([FLAGS.cql.discount ** (dt/max(dts)) for dt in dts]).cuda()
                 discount_arr =  discount_arr.repeat_interleave(per_dataset_batch_size)
-                metrics.update(prefix_metrics(sac.train(batch, discount_arr), 'sac'))
+                metrics.update(prefix_metrics(sac.train(batch, discount_arr, n_steps), 'sac'))
 
         with Timer() as eval_timer:
             for dt, eval_sampler in eval_samplers.items():
@@ -313,8 +284,12 @@ def main(argv):
                     metrics[f'average_return_{dt}'] = np.mean([np.sum(t['rewards']) for t in trajs])
                     metrics[f'average_traj_length_{dt}'] = np.mean([len(t['rewards']) for t in trajs])
                     if FLAGS.save_model:
+                        if metrics[f'average_return_{dt}'] >= 3:
+                            file_name = f"model_r{metrics[f'average_return_{dt}']}_epoch{epoch}.pkl"
+                        else:
+                            file_name = 'model.pkl'
                         save_data = {'sac': sac, 'variant': variant, 'epoch': epoch}
-                        wandb_logger.save_pickle(save_data, 'model.pkl')
+                        wandb_logger.save_pickle(save_data, file_name)
 
         metrics['train_time'] = train_timer()
         metrics['eval_time'] = eval_timer()

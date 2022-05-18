@@ -10,6 +10,7 @@ import pickle
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvas
 
 import absl.flags
 from absl import logging
@@ -117,6 +118,10 @@ class WandBLogger(object):
     
     def load_pickle(self, loaddir):
         with open(os.path.join(loaddir, 'model.pkl'), 'rb') as fout:
+            return pickle.load(fout)
+    
+    def load_pickle_from_filename(self, loadpath):
+        with open(loadpath, 'rb') as fout:
             return pickle.load(fout)
 
     @property
@@ -242,4 +247,47 @@ def vid_from_frames(imgs, output_file):
         clip.write_gif(output_file)
     if output_file.endswith('.mp4'):
         clip.write_videofile(output_file)
+
+def np_unstack(array, axis):
+    arr = np.split(array, array.shape[axis], axis)
+    arr = [a.squeeze() for a in arr]
+    return arr
+
+def plot_q_over_traj(q_estimates, rewards, images, output_file):
+    """
+    Args:
+        - rewards: list of r
+        - list of q1(s, a), q2(s,a) from traj
+    Returns:
+        - 
+    """
+    q_estimates_np = np.stack(q_estimates, 1)
+
+    fig, axs = plt.subplots(3, 1)
+    canvas = FigureCanvas(fig)
+    plt.xlim([0, len(q_estimates)])
+
+    # assume image in T, C, H, W shape
+    assert len(images.shape) == 4
+    assert images.shape[-1] == 3
+
+    interval = images.shape[0] // 4
+    sel_images = images[::interval]
+    sel_images = np.concatenate(np_unstack(sel_images, 0), 1)
+
+    axs[0].imshow(sel_images)
+    axs[1].plot(q_estimates_np[:, 0], linestyle='--', marker='o')
+    axs[1].plot(q_estimates_np[:, 1], linestyle='--', marker='o')
+    axs[1].set_ylabel('q values')
+    axs[2].plot(rewards, linestyle='--', marker='o')
+    axs[2].set_ylabel('rewards')
+    axs[2].set_xlim([0, len(rewards)])
+
+    plt.tight_layout()
+
+    canvas.draw() 
+    out_image = np.frombuffer(canvas.tostring_rgb(), dtype='uint8')
+    out_image = out_image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    plt.savefig(output_file)
+    return out_image
 

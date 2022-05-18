@@ -1,10 +1,12 @@
+import os
 import numpy as np
+import torch
 
-from .utils import vid_from_frames
+from .utils import vid_from_frames, plot_q_over_traj
 
 class StepSampler(object):
 
-    def __init__(self, env, max_traj_length=1000):
+    def __init__(self, env, max_traj_length=1000, action_scale=1.0):
         self.max_traj_length = max_traj_length
         self._env = env
         self._traj_steps = 0
@@ -23,17 +25,18 @@ class StepSampler(object):
             action = policy(
                 np.expand_dims(observation, 0), deterministic=deterministic
             )[0, :]
+            action = action / self.action_scale
             next_observation, reward, done, _ = self.env.step(action)
             # reward = reward * (fs/10)
             observations.append(observation)
-            actions.append(action)
+            actions.append(action*self.action_scale)
             rewards.append(reward)
             dones.append(done)
             next_observations.append(next_observation)
 
             if replay_buffer is not None:
                 replay_buffer.add_sample(
-                    observation, action, reward, next_observation, done
+                    observation, action*self.action_scale, reward, next_observation, done
                 )
 
             self._current_observation = next_observation
@@ -57,11 +60,12 @@ class StepSampler(object):
 
 class TrajSampler(object):
 
-    def __init__(self, env, max_traj_length=1000):
+    def __init__(self, env, max_traj_length=1000, action_scale=1.0):
         self.max_traj_length = max_traj_length
         self._env = env
+        self.action_scale = action_scale
 
-    def sample(self, policy, n_trajs, dt_feat, dt, deterministic=False, replay_buffer=None, video=False, output_file=''):
+    def sample(self, policy, n_trajs, dt_feat, dt, deterministic=False, replay_buffer=None, video=False, output_file='', qs=None):
         trajs = []
         for traj in range(n_trajs):
             observations = []
@@ -85,24 +89,10 @@ class TrajSampler(object):
                 action = policy(
                     np.expand_dims(observation, 0), deterministic=deterministic
                 )[0, :]
-                # if you want to test action repeats, uncomment
-                # if _ % 10 == 0:
-                #     action = policy(
-                #         np.expand_dims(observation, 0), deterministic=deterministic
-                #     )[0, :]
-                #     print(action, _)
-                # else:
-                #     action = action
-                #     print(action, _)
-                # if _ % 10 == 0:
-                #     action = old_actions[_//10]
-                #     print(action, _)
-                # else:
-                #     action = action
-                #     print(action, _)
+                action = action/self.action_scale
                 next_observation, reward, done, info = self.env.step(action)
                 observations.append(observation)
-                actions.append(action)
+                actions.append(action*self.action_scale)
                 rewards.append(reward)
                 dones.append(done)
                 if 'score' in info:
@@ -123,17 +113,13 @@ class TrajSampler(object):
 
                 if replay_buffer is not None:
                     replay_buffer.add_sample(
-                        observation, action, reward, next_observation, done
+                        observation, action*self.action_scale, reward, next_observation, done
                     )
 
                 observation = next_observation
 
                 if done:
                     break
-
-            # import pickle
-            # with open('actions.pkl','wb') as fp:
-            #     pickle.dump(actions, fp)
 
             trajs.append(dict(
                 observations=np.array(observations, dtype=np.float32),
@@ -146,6 +132,15 @@ class TrajSampler(object):
             if video and traj == 0:
                 imgs = np.stack(imgs, axis=0)
                 vid_from_frames(imgs, output_file)
+                file_path_stem = os.path.splitext(output_file)[0]
+                if qs:
+                    q_estimates = []
+                    for q in qs:
+                        q_estimates.append(
+                            q(torch.Tensor(observations).cuda(),
+                            torch.Tensor(actions).cuda()).cpu().detach().numpy())
+                    plot_q_over_traj(
+                        q_estimates, rewards, imgs, f'{file_path_stem}_q.jpg')
 
         return trajs
 

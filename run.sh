@@ -30,8 +30,9 @@ Xvfb :0 &
 
 # off-line trainning mujoco
 MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
-  --logging.output_dir "./experiments/box2d/${8}/" \
+  --logging.output_dir "./experiments/mujoco/${8}/" \
   --logging.online True \
+  --load_model "/iris/u/kayburns/continuous-rl/CQL/experiments/mujoco/kitchen-complete-v0/0303f0c18c494c56aa7dda17218cb3f7/" \
   --env "${8}" \
   --max_traj_length ${6} \
   --cql.policy_lr ${2} \

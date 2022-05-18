@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from .model import Scalar, soft_target_update
 
 
-class ConservativeSAC(object):
+class MixSAC(object):
 
     @staticmethod
     def get_default_config(updates=None):
@@ -40,13 +40,14 @@ class ConservativeSAC(object):
             config.update(ConfigDict(updates).copy_and_resolve_references())
         return config
 
-    def __init__(self, config, policy, qf1, qf2, target_qf1, target_qf2):
-        self.config = ConservativeSAC.get_default_config(config)
+    def __init__(self, config, policy, qf1, qf2, target_qf1, target_qf2, update_target=True):
+        self.config = MixSAC.get_default_config(config)
         self.policy = policy
         self.qf1 = qf1
         self.qf2 = qf2
         self.target_qf1 = target_qf1
         self.target_qf2 = target_qf2
+        self.update_target = update_target
 
         optimizer_class = {
             'adam': torch.optim.Adam,
@@ -76,25 +77,32 @@ class ConservativeSAC(object):
                 lr=self.config.qf_lr,
             )
 
-        self.update_target_network(1.0)
+        if self.update_target:
+            self.update_target_network(1.0)
         self._total_steps = 0
 
     def update_target_network(self, soft_target_update_rate):
         soft_target_update(self.qf1, self.target_qf1, soft_target_update_rate)
         soft_target_update(self.qf2, self.target_qf2, soft_target_update_rate)
-
-    def train(self, batch, discount_arr, n_steps):
+    
+    def train(self, batch, demo_mask, discount_arr, n_steps):
         self._total_steps += 1
         batch_size, N, _ = batch['observations'].shape
         n_steps = n_steps.long()-1
 
         observations = batch['observations'][:,0,:]
         actions = batch['actions'][:,0,:]
-        rewards = batch['rewards'].squeeze(-1)
+        rewards = batch['rewards'].squeeze()
         next_observations = batch['next_observations'].reshape(batch_size*N, -1)
-        dones = batch['dones'].squeeze(-1)
+        dones = batch['dones'].squeeze()
+        replay_mask = torch.logical_not(demo_mask)
 
-        new_actions, log_pi = self.policy(observations)
+        new_actions_demo, log_pi_demo = self.policy(
+            observations[:,:-1], use_second_head=False)
+        new_actions_replay, log_pi_replay = self.policy(
+            observations[:,:-1], use_second_head=True)
+        new_actions = new_actions_demo*demo_mask.unsqueeze(1) + new_actions_replay*replay_mask.unsqueeze(1)
+        log_pi = log_pi_demo*demo_mask + log_pi_replay*replay_mask
 
         if self.config.use_automatic_entropy_tuning:
             alpha_loss = -(self.log_alpha() * (log_pi + self.config.target_entropy).detach()).mean()
@@ -109,14 +117,23 @@ class ConservativeSAC(object):
             self.qf2(observations, new_actions),
         )
         policy_loss = (alpha*log_pi - q_new_actions).mean()
-        # policy_loss = F.mse_loss(new_actions, actions)
+        policy_loss += 10 * F.mse_loss(
+            new_actions*demo_mask.reshape(-1, 1),
+            actions*demo_mask.reshape(-1, 1)) 
 
         """ Q function loss """
         q1_pred = self.qf1(observations, actions)
         q2_pred = self.qf2(observations, actions)
 
-        new_next_actions, next_log_pi = self.policy(next_observations)
-        # shape: (B * max_N)
+        new_next_actions_demo, next_log_pi_demo = self.policy(
+            next_observations[:,:-1], use_second_head=False)
+        new_next_actions_replay, next_log_pi_replay = self.policy(
+            next_observations[:,:-1], use_second_head=True)
+        new_next_actions_demo = new_next_actions_demo*demo_mask.repeat_interleave(N).unsqueeze(1)
+        new_next_actions_replay = new_next_actions_replay*replay_mask.repeat_interleave(N).unsqueeze(1)
+        new_next_actions = new_next_actions_demo + new_next_actions_replay
+        next_log_pi = next_log_pi_demo*demo_mask.repeat_interleave(N) + next_log_pi_replay*replay_mask.repeat_interleave(N)
+        
         target_q_values = torch.min(
             self.target_qf1(next_observations, new_next_actions),
             self.target_qf2(next_observations, new_next_actions),
@@ -137,16 +154,21 @@ class ConservativeSAC(object):
         qf1_loss = F.mse_loss(q1_pred, n_q_target.detach())
         qf2_loss = F.mse_loss(q2_pred, n_q_target.detach())
 
+
         ### CQL
         if not self.config.use_cql:
             qf_loss = qf1_loss + qf2_loss
         else:
-            next_observations = batch['next_observations'][np.arange(batch_size), n_steps-1]
+            next_observations = batch['next_observations'][np.arange(batch_size), n_steps].squeeze() # TODO. should this be the n-step next or just next
             batch_size = actions.shape[0]
             action_dim = actions.shape[-1]
             cql_random_actions = actions.new_empty((batch_size, self.config.cql_n_actions, action_dim), requires_grad=False).uniform_(-1, 1)
-            cql_current_actions, cql_current_log_pis = self.policy(observations, repeat=self.config.cql_n_actions)
-            cql_next_actions, cql_next_log_pis = self.policy(next_observations, repeat=self.config.cql_n_actions)
+            cql_current_actions, cql_current_log_pis = self.policy(
+                observations[:,:-1], repeat=self.config.cql_n_actions,
+                use_second_head=False)
+            cql_next_actions, cql_next_log_pis = self.policy(
+                next_observations[:,:-1], repeat=self.config.cql_n_actions,
+                use_second_head=False)
             cql_current_actions, cql_current_log_pis = cql_current_actions.detach(), cql_current_log_pis.detach()
             cql_next_actions, cql_next_log_pis = cql_next_actions.detach(), cql_next_log_pis.detach()
 
@@ -181,12 +203,12 @@ class ConservativeSAC(object):
                     dim=1
                 )
             
-            cql_min_qf1_loss = torch.logsumexp(cql_cat_q1 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
-            cql_min_qf2_loss = torch.logsumexp(cql_cat_q2 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
+            cql_min_qf1_loss = torch.logsumexp(demo_mask.reshape(-1, 1) * cql_cat_q1 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
+            cql_min_qf2_loss = torch.logsumexp(demo_mask.reshape(-1, 1) * cql_cat_q2 / self.config.cql_temp, dim=1).mean() * self.config.cql_min_q_weight * self.config.cql_temp
 
             """Subtract the log likelihood of data"""
-            cql_min_qf1_loss = cql_min_qf1_loss - q1_pred.mean() * self.config.cql_min_q_weight
-            cql_min_qf2_loss = cql_min_qf2_loss - q2_pred.mean() * self.config.cql_min_q_weight
+            cql_min_qf1_loss = cql_min_qf1_loss - (q1_pred * demo_mask).mean() * self.config.cql_min_q_weight
+            cql_min_qf2_loss = cql_min_qf2_loss - (q2_pred * demo_mask).mean() * self.config.cql_min_q_weight
 
             if self.config.cql_lagrange:
                 alpha_prime = torch.clamp(torch.exp(self.log_alpha_prime()), min=0.0, max=1000000.0)
@@ -218,7 +240,7 @@ class ConservativeSAC(object):
         qf_loss.backward()
         self.qf_optimizer.step()
 
-        if self.total_steps % self.config.target_update_period == 0:
+        if self.total_steps % self.config.target_update_period == 0 and self.update_target:
             self.update_target_network(
                 self.config.soft_target_update_rate
             )
@@ -248,7 +270,6 @@ class ConservativeSAC(object):
             policy_loss=policy_loss.item(),
             qf1_loss=qf1_loss.item(),
             qf2_loss=qf2_loss.item(),
-            q_mean=q_target.mean().item(),
             alpha_loss=alpha_loss.item(),
             alpha=alpha.item(),
             average_qf1=q1_pred.mean().item(),
