@@ -49,6 +49,7 @@ FLAGS_DEF = define_flags_with_default(
     load_model_from_path='',
     N_steps=80,
     dt_feat=True,
+    video=False,
 
 
     batch_size=256,
@@ -89,8 +90,8 @@ def main(argv):
         test_env.frame_skip = FLAGS.dt
         assert train_env.dt == FLAGS.dt * .002
         assert test_env.dt == FLAGS.dt * .002
-        train_sampler = StepSampler(train_env, FLAGS.max_traj_length, action_scale=FLAGS.dt/40)
-        eval_sampler = TrajSampler(test_env, FLAGS.max_traj_length, action_scale=FLAGS.dt/40)
+        train_sampler = StepSampler(train_env, FLAGS.max_traj_length, action_scale=1.0)
+        eval_sampler = TrajSampler(test_env, FLAGS.max_traj_length, action_scale=1.0)
     else:
         train_sampler = StepSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length)
@@ -241,7 +242,10 @@ def main(argv):
 
         with Timer() as eval_timer:
             if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
-                video = epoch == 0 or (epoch + 1) % (FLAGS.eval_period * 10) == 0
+                if FLAGS.video:
+                    video = epoch == 0 or (epoch + 1) % (FLAGS.eval_period * 10) == 0
+                else:
+                    video = False
                 output_file = os.path.join(wandb_logger.config.output_dir, f'eval_{epoch}.gif')
                 trajs = eval_sampler.sample(
                     sampler_policy, FLAGS.eval_n_trajs, FLAGS.dt_feat, norm_dt_80, deterministic=True,

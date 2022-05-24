@@ -186,7 +186,7 @@ def load_kitchen_dataset(h5path):
         dones=dataset_file["dones"][:].astype(np.float32),
     )
     for k, v in dataset.items():
-        v = v[:500000] # all of the mujoco buffers are empty after 500k
+        dataset[k] = v[:500000] # all of the mujoco buffers are empty after 500k
     return dataset
 
 def index_batch(batch, indices):
@@ -223,18 +223,21 @@ def subsample_batch(batch, size):
 
 def subsample_flat_batch_n(batch, size, n_steps):
     dones = batch['dones'].nonzero()[0]
-    # concatenate done_idx with traj lens
-    dones_and_lens = np.vstack((
-        np.roll(dones, shift=1),
-        np.diff(dones, prepend=0)))
-    dones_and_lens[0,0] = 0
-    # select (batch_idx, len) pairs from batch
-    batch_indices = np.random.choice(dones.shape[0], size=size)
-    batch_indices_and_lens = dones_and_lens[:,batch_indices]
-    # select steps from trajectory
-    traj_indices = np.random.randint(batch_indices_and_lens[1]-n_steps)
-    # add with done_idx to get flat indices
-    indices = traj_indices + batch_indices_and_lens[0]
+    if dones.size:
+        # concatenate done_idx with traj lens
+        dones_and_lens = np.vstack((
+            np.roll(dones, shift=1),
+            np.diff(dones, prepend=0)))
+        dones_and_lens[0,0] = 0
+        # select (batch_idx, len) pairs from batch
+        batch_indices = np.random.choice(dones.shape[0], size=size)
+        batch_indices_and_lens = dones_and_lens[:,batch_indices]
+        # select steps from trajectory
+        traj_indices = np.random.randint(batch_indices_and_lens[1]-n_steps)
+        # add with done_idx to get flat indices
+        indices = traj_indices + batch_indices_and_lens[0]
+    else:
+        indices = np.random.randint(batch['dones'].shape[0]-n_steps, size=size)
     # add next n_steps to trajectory indices
     ascending_idxs = np.tile(np.arange(n_steps), size)
     indices = np.repeat(indices, n_steps) + ascending_idxs
