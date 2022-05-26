@@ -145,15 +145,14 @@ def main(argv):
         datasets[80] = load_kitchen_dataset(
             '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/2ad22ec184eb4fb5b242ee5315b4cc0b/buffer.h5py')
         
-        env40 = gym.make(FLAGS.env)
+        env40 = gym.make(FLAGS.env).unwrapped
         assert env40.dt == 40 * .002
-        eval_samplers[40] = TrajSampler(env40.unwrapped, FLAGS.max_traj_length)
+        eval_samplers[40] = TrajSampler(env40, FLAGS.max_traj_length)
 
-        env80 = gym.make(FLAGS.env)
+        env80 = gym.make(FLAGS.env).unwrapped
         env80.frame_skip = 80
-        env80.dt = 80 * .002
         assert env80.dt == 80 * .002
-        eval_samplers[80] = TrajSampler(env80.unwrapped, FLAGS.max_traj_length, action_scale=2.0)
+        eval_samplers[80] = TrajSampler(env80, FLAGS.max_traj_length, action_scale=2.0)
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
 

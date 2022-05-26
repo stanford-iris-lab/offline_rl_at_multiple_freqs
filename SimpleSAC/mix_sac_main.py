@@ -81,6 +81,7 @@ def main(argv):
         test_env.frame_skip = FLAGS.dt
         assert train_env.dt == FLAGS.dt * .00125
         assert test_env.dt == FLAGS.dt * .00125
+        import pdb; pdb.set_trace() # double check that unwrapping doesn't break
         train_sampler = StepSampler(train_env.unwrapped, FLAGS.max_traj_length)
         eval_sampler = TrajSampler(test_env.unwrapped, FLAGS.max_traj_length)
     elif 'kitchen' in FLAGS.env:
