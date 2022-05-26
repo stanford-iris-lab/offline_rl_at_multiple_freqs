@@ -100,11 +100,16 @@ class ReplayBuffer(object):
     def store(self, h5path):
         """Stores buffer data as an h5py file."""
         dataset_file = h5py.File(h5path, "w")
-        dataset_file.create_dataset("obs", data=self._observations)
-        dataset_file.create_dataset("actions", data=self._actions)
-        dataset_file.create_dataset("next_obs", data=self._next_observations)
-        dataset_file.create_dataset("rewards", data=self._rewards)
-        dataset_file.create_dataset("dones", data=self._dones)
+        dataset_file.create_dataset(
+            "obs", data=self._observations[:self._size, ...])
+        dataset_file.create_dataset(
+            "actions", data=self._actions[:self._size, ...])
+        dataset_file.create_dataset(
+            "next_obs", data=self._next_observations[:self._size, ...])
+        dataset_file.create_dataset(
+            "rewards", data=self._rewards[:self._size, ...])
+        dataset_file.create_dataset(
+            "dones", data=self._dones[:self._size, ...])
         dataset_file.close()
     
     def generator(self, batch_size, n_batchs=None):
