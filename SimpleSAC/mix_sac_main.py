@@ -198,8 +198,10 @@ def main(argv):
 
         with Timer() as train_timer:
             for batch_idx in range(FLAGS.n_train_step_per_epoch):
-                max_steps = int(FLAGS.N_steps / min(dts))
-                # max_steps = 1
+                if FLAGS.N_steps:
+                    max_steps = int(FLAGS.N_steps / min(dts))
+                else:
+                    max_steps = 1
 
                 batch = replay_buffer.sample_n(FLAGS.batch_size//2, max_steps)
                 expert_batch = expert_buffer.sample_n(FLAGS.batch_size//2, max_steps)
@@ -227,8 +229,10 @@ def main(argv):
                 mix_batch = {}
                 for k in batch.keys():
                     mix_batch[k] = torch.cat([batch[k], expert_batch[k]], axis=0)
-                n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
-                # n_steps = torch.Tensor([1 for dt in dts])
+                if FLAGS.N_steps:
+                    n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
+                else:
+                    n_steps = torch.Tensor([1 for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
                 demo_mask = torch.zeros(FLAGS.batch_size).cuda()
                 demo_mask[FLAGS.batch_size//2:] = 1
