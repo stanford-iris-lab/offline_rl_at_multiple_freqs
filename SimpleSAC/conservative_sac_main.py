@@ -47,12 +47,14 @@ FLAGS_DEF = define_flags_with_default(
     eval_n_trajs=5,
     load_model='',
     visualize_traj=False,
-    N_steps=0,
+    N_steps=0.0,
     # N_datapoints=250000,
-    dt_feat=True,
+    dt_feat=False,
     pretrained_target_path='',
     shared_q_target=False,
     max_q_target=False,
+    video=False,
+    half_angle=False,
     # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.02/aec001f95d094fa598456707e8c81814/',
 
     cql=ConservativeSAC.get_default_config(),
@@ -75,29 +77,29 @@ def main(argv):
 
     set_random_seed(FLAGS.seed)
 
-    if "pendulum_" in FLAGS.env:
+    if "pendulum" in FLAGS.env:
         datasets, eval_samplers = {}, {}
         for dt in [.01, .02, .005]:
             env = gym.make('Pendulum-v1').unwrapped
             env.dt = dt
             eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), FLAGS.max_traj_length)
-            # eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), int(100 * (1/dt)))
-            if dt == .005 or dt == .01:
-                half_angle = True
+            if FLAGS.half_angle:
+                if dt == .005 or dt == .01:
+                    half_angle = True
+                else:
+                    half_angle = False
             else:
                 half_angle = False
-            dataset = load_pendulum_dataset(
+            datasets[dt] = load_pendulum_dataset(
                 f"/iris/u/kayburns/continuous-rl/dau/logdir/continuous_pendulum_sparse1/cdau/half_buffer_0_{str(dt)[1:]}/data0.h5py",
                 half_angle=half_angle)
-            dataset['rewards'] = dataset['rewards'] * FLAGS.reward_scale + FLAGS.reward_bias
-            datasets[dt] = dataset
     elif "door-open-v2-goal-observable" in FLAGS.env:
         # find correct buffer file
         buffers = {
-            1: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/door-open-v2-goal-observable/f87d142ac7e54d659d999cba3e5e5421/buffer.h5py",
-            2: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/door-open-v2-goal-observable/8690f0c73f7a4b94b1c7dbc3330174eb/buffer.h5py",
-            5: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/door-open-v2-goal-observable/67fa1c8c44a94062b7b6d1a8914d176a/buffer.h5py",
-            10: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/door-open-v2-goal-observable/b6842bc3810641f6868fb42a242fe059/buffer.h5py"
+            1: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect_old/door-open-v2-goal-observable/f87d142ac7e54d659d999cba3e5e5421/buffer.h5py",
+            2: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect_old/door-open-v2-goal-observable/8690f0c73f7a4b94b1c7dbc3330174eb/buffer.h5py",
+            5: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect_old/door-open-v2-goal-observable/67fa1c8c44a94062b7b6d1a8914d176a/buffer.h5py",
+            10: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect_old/door-open-v2-goal-observable/b6842bc3810641f6868fb42a242fe059/buffer.h5py"
         }
         datasets, eval_samplers = {}, {}
 
@@ -110,7 +112,7 @@ def main(argv):
             eval_samplers[dt] = TrajSampler(env, FLAGS.max_traj_length)
 
             # fetch dataset
-            dataset = load_dataset(buffers[dt])
+            dataset = load_door_dataset(buffers[dt], traj_length=500)
             if FLAGS.sparse:
                 dataset['rewards'] = (dataset['rewards'] == 10.0 * (dt/10)).astype('float32')
             datasets[dt] = dataset
@@ -141,23 +143,41 @@ def main(argv):
     elif 'kitchen' in FLAGS.env:
         datasets, eval_samplers = {}, {}
         env = gym.make(FLAGS.env)
-        datasets[40] = load_d4rl_dataset(env)
-        datasets[80] = load_kitchen_dataset(
-            '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/2ad22ec184eb4fb5b242ee5315b4cc0b/buffer.h5py')
+        # datasets[40] = load_d4rl_dataset(env)
+        # datasets[80] = load_kitchen_dataset(
+        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/2ad22ec184eb4fb5b242ee5315b4cc0b/buffer.h5py')
         
-        env40 = gym.make(FLAGS.env).unwrapped
-        assert env40.dt == 40 * .002
-        eval_samplers[40] = TrajSampler(env40, FLAGS.max_traj_length)
+        # env40 = gym.make(FLAGS.env).unwrapped
+        # assert env40.dt == 40 * .002
+        # eval_samplers[40] = TrajSampler(env40, FLAGS.max_traj_length)
 
-        env80 = gym.make(FLAGS.env).unwrapped
-        env80.frame_skip = 80
-        assert env80.dt == 80 * .002
-        eval_samplers[80] = TrajSampler(env80, FLAGS.max_traj_length, action_scale=2.0)
+        # env80 = gym.make(FLAGS.env).unwrapped
+        # env80.frame_skip = 80
+        # assert env80.dt == 80 * .002
+        # eval_samplers[80] = TrajSampler(env80, FLAGS.max_traj_length, action_scale=2.0)
+        
+        datasets[30] = load_kitchen_dataset(
+            '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/8e25ba5f337a44d4a27aedc077c4a9bf/buffer.h5py',
+            traj_length=666)
+        import pdb; pdb.set_trace()
+        # datasets[50] = load_kitchen_dataset(
+        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/eafb3030e80d4003a14b9dc1a47d8573/buffer.h5py',
+        #     traj_length=400)
+
+        env30 = gym.make(FLAGS.env).unwrapped
+        env30.frame_skip = 30
+        assert env30.dt == 30 * .002
+        eval_samplers[30] = TrajSampler(env30, FLAGS.max_traj_length, action_scale=1.0)
+
+        # env50 = gym.make(FLAGS.env).unwrapped
+        # env50.frame_skip = 50
+        # assert env50.dt == 50 * .002
+        # eval_samplers[50] = TrajSampler(env50, FLAGS.max_traj_length, action_scale=1.0)
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
 
     if FLAGS.load_model:
-        loaded_model = wandb_logger.load_pickle(FLAGS.load_model)
+        loaded_model = wandb_logger.load_pickle_from_filename(FLAGS.load_model)
         print(f"Loaded model from epoch {loaded_model['epoch']}")
         sac = loaded_model['sac']
         policy = sac.policy
@@ -253,6 +273,7 @@ def main(argv):
                 if epoch == 0 or (epoch + 1) % FLAGS.eval_period == 0:
                     # my_seed = eval_sampler._env.seed(FLAGS.seed)
                     video = epoch == 0 or (epoch + 1) % (FLAGS.eval_period * 10) == 0
+                    video = video and FLAGS.video
                     output_file = os.path.join(
                         wandb_logger.config.output_dir, f'eval_dt_{dt}_{epoch}.gif')
 

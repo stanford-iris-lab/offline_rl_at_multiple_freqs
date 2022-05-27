@@ -167,10 +167,9 @@ def load_pendulum_dataset(h5path, half_angle=False):
             dim_obs = v.shape[1]
         else:
             dim_obs = 1
-        # v = v[-250000:] # all of the mujoco buffers are empty after 500k
 
         v = v.reshape(-1, episode_length, 256, dim_obs) # this only works for pendulum
-        v = v[:,:,:10,:]
+        # v = v[:,:,:10,:]
         dataset[k] = v.transpose(0, 2, 1, 3).reshape(-1, dim_obs)
     # then select out correct angles
     if half_angle:
@@ -179,9 +178,10 @@ def load_pendulum_dataset(h5path, half_angle=False):
         if half_angle:
             v = v[mask]
         dataset[k] = v
+    dataset['terminals'] = dataset['dones']
     return dataset
 
-def load_kitchen_dataset(h5path):
+def load_kitchen_dataset(h5path, traj_length):
     dataset_file = h5py.File(h5path, "r")
     dataset = dict(
         observations=dataset_file["obs"][:].astype(np.float32),
@@ -192,6 +192,29 @@ def load_kitchen_dataset(h5path):
     )
     for k, v in dataset.items():
         dataset[k] = v[:500000] # all of the mujoco buffers are empty after 500k
+    dataset['terminals'] = np.zeros(500000)
+    dataset['terminals'][traj_length-1::traj_length] = 1
+    return dataset
+
+def load_door_dataset(h5path, traj_length):
+    dataset_file = h5py.File(h5path, "r")
+    dataset = dict(
+        observations=dataset_file["obs"][:].astype(np.float32),
+        actions=dataset_file["actions"][:].astype(np.float32),
+        next_observations=dataset_file["next_obs"][:].astype(np.float32),
+        rewards=dataset_file["rewards"][:].astype(np.float32),
+        dones=dataset_file["dones"][:].astype(np.float32),
+    )
+    # TODO: make consistent
+    for k, v in dataset.items():
+        if len(v.shape) > 1:
+            dim_obs = v.shape[1]
+        else:
+            dim_obs = 1
+        v = v[490000:500000] # all of the mujoco buffers are empty after 500k
+    dataset['terminals'] = np.zeros(500000)
+    dataset['terminals'][traj_length-1::traj_length] = 1
+    dataset['terminals'] = dataset['terminals'][490000:500000]
     return dataset
 
 def index_batch(batch, indices):
@@ -227,7 +250,7 @@ def subsample_batch(batch, size):
     return index_batch(batch, indices)
 
 def subsample_flat_batch_n(batch, size, n_steps):
-    dones = batch['dones'].nonzero()[0]
+    dones = batch['terminals'].nonzero()[0]
     if dones.size:
         # concatenate done_idx with traj lens
         dones_and_lens = np.vstack((
@@ -242,7 +265,7 @@ def subsample_flat_batch_n(batch, size, n_steps):
         # add with done_idx to get flat indices
         indices = traj_indices + batch_indices_and_lens[0]
     else:
-        indices = np.random.randint(batch['dones'].shape[0]-n_steps, size=size)
+        indices = np.random.randint(batch['terminals'].shape[0]-n_steps, size=size)
     # add next n_steps to trajectory indices
     ascending_idxs = np.tile(np.arange(n_steps), size)
     indices = np.repeat(indices, n_steps) + ascending_idxs
