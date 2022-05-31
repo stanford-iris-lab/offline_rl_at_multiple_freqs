@@ -20,12 +20,13 @@ MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
   --logging.output_dir "./experiments/mujoco/kitchen-complete-v0/" \
   --logging.online True \
   --env "kitchen-complete-v0" \
-  --N_steps ${7} \
-  --max_traj_length ${5} \
-  --seed ${6} \
+  --N_steps ${6} \
+  --n_train_step_per_epoch 0 \
+  --max_traj_length ${4} \
+  --seed ${5} \
   --device 'cuda' \
   --save_model True \
-  --cql.policy_lr ${2} \
-  --cql.cql_min_q_weight ${1} \
-  --cql.qf_lr ${3} \
-  --cql.discount ${4}
+  --cql.policy_lr ${1} \
+  --cql.cql_min_q_weight 5 \
+  --cql.qf_lr ${2} \
+  --cql.discount ${3}

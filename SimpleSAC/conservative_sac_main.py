@@ -144,35 +144,54 @@ def main(argv):
         datasets, eval_samplers = {}, {}
         env = gym.make(FLAGS.env)
         # datasets[40] = load_d4rl_dataset(env)
-        # datasets[80] = load_kitchen_dataset(
-        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/2ad22ec184eb4fb5b242ee5315b4cc0b/buffer.h5py')
+        # datasets[40]['terminals'] = datasets[40]['dones']
         
-        # env40 = gym.make(FLAGS.env).unwrapped
-        # assert env40.dt == 40 * .002
-        # eval_samplers[40] = TrajSampler(env40, FLAGS.max_traj_length)
-
-        # env80 = gym.make(FLAGS.env).unwrapped
-        # env80.frame_skip = 80
-        # assert env80.dt == 80 * .002
-        # eval_samplers[80] = TrajSampler(env80, FLAGS.max_traj_length, action_scale=2.0)
-        
-        datasets[30] = load_kitchen_dataset(
+        # datasets[30] = load_kitchen_dataset(
+        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/8e25ba5f337a44d4a27aedc077c4a9bf/buffer.h5py',
+        #     traj_length=666)
+        datasets[35] = load_kitchen_dataset(
             '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/8e25ba5f337a44d4a27aedc077c4a9bf/buffer.h5py',
-            traj_length=666)
-        import pdb; pdb.set_trace()
+            traj_length=571,
+            splice=True)
+        # datasets[45] = load_kitchen_dataset(
+        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/4e988ccf1d1a46b489ccaaeee56ce769/buffer.h5py',
+        #     traj_length=444,
+        #     splice=False)
         # datasets[50] = load_kitchen_dataset(
         #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/eafb3030e80d4003a14b9dc1a47d8573/buffer.h5py',
         #     traj_length=400)
+        # datasets[80] = load_kitchen_dataset(
+        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/2ad22ec184eb4fb5b242ee5315b4cc0b/buffer.h5py')
 
-        env30 = gym.make(FLAGS.env).unwrapped
-        env30.frame_skip = 30
-        assert env30.dt == 30 * .002
-        eval_samplers[30] = TrajSampler(env30, FLAGS.max_traj_length, action_scale=1.0)
+        # env30 = gym.make(FLAGS.env).unwrapped
+        # env30.frame_skip = 30
+        # assert env30.dt == 30 * .002
+        # eval_samplers[30] = TrajSampler(env30, FLAGS.max_traj_length, action_scale=1.0)
+
+        env35 = gym.make(FLAGS.env).unwrapped
+        env35.frame_skip = 35
+        assert env35.dt == 35 * .002
+        eval_samplers[35] = TrajSampler(env35, FLAGS.max_traj_length, action_scale=1.0)
+
+        # env40 = gym.make(FLAGS.env).unwrapped
+        # assert env40.dt == 40 * .002
+        # eval_samplers[40] = TrajSampler(env40, FLAGS.max_traj_length, action_scale=1.0)
+        
+        # env45 = gym.make(FLAGS.env).unwrapped
+        # env45.frame_skip = 45
+        # assert env45.dt == 45 * .002
+        # eval_samplers[45] = TrajSampler(env45, FLAGS.max_traj_length, action_scale=1.0)
 
         # env50 = gym.make(FLAGS.env).unwrapped
         # env50.frame_skip = 50
         # assert env50.dt == 50 * .002
         # eval_samplers[50] = TrajSampler(env50, FLAGS.max_traj_length, action_scale=1.0)
+
+        # env80 = gym.make(FLAGS.env).unwrapped
+        # env80.frame_skip = 80
+        # assert env80.dt == 80 * .002
+        # eval_samplers[80] = TrajSampler(env80, FLAGS.max_traj_length, action_scale=2.0)
+
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
 
@@ -283,7 +302,7 @@ def main(argv):
                         deterministic=True, video=video, output_file=output_file
                     )
 
-                    if FLAGS.visualize_traj or epoch % 100 == 99:
+                    if FLAGS.visualize_traj or epoch % 100 == 99 or epoch == 0:
                         if "walker_" in FLAGS.env:
                             min_traj_len = min([len(t['actions']) for t in trajs])
                             actions = [t['actions'][:min_traj_len] for t in trajs]
@@ -292,7 +311,7 @@ def main(argv):
                             metrics['knee0'] = wandb_logger.plot(mean_actions[:,1])
                             metrics['hip1'] = wandb_logger.plot(mean_actions[:,2])
                             metrics['knee1'] = wandb_logger.plot(mean_actions[:,3])
-                        elif "pendulum_" in FLAGS.env:
+                        elif "pendulum" in FLAGS.env:
                             norm_dt = (dt - np.mean(dts)) / np.std(dts)
                             generate_pendulum_visualization(
                                 sac.policy, sac.qf1, sac.qf2, wandb_logger,
@@ -304,10 +323,11 @@ def main(argv):
                     metrics[f'average_return_{dt}'] = np.mean([np.sum(t['rewards']) for t in trajs])
                     metrics[f'average_traj_length_{dt}'] = np.mean([len(t['rewards']) for t in trajs])
                     if FLAGS.save_model:
-                        if metrics[f'average_return_{dt}'] >= 3:
-                            file_name = f"model_r{metrics[f'average_return_{dt}']}_epoch{epoch}.pkl"
-                        else:
-                            file_name = 'model.pkl'
+                        # if metrics[f'average_return_{dt}'] >= 3:
+                        #     file_name = f"model_r{metrics[f'average_return_{dt}']}_epoch{epoch}.pkl"
+                        # else:
+                        #     file_name = 'model.pkl'
+                        file_name = 'model.pkl'
                         save_data = {'sac': sac, 'variant': variant, 'epoch': epoch}
                         wandb_logger.save_pickle(save_data, file_name)
 

@@ -181,7 +181,7 @@ def load_pendulum_dataset(h5path, half_angle=False):
     dataset['terminals'] = dataset['dones']
     return dataset
 
-def load_kitchen_dataset(h5path, traj_length):
+def load_kitchen_dataset(h5path, traj_length, splice):
     dataset_file = h5py.File(h5path, "r")
     dataset = dict(
         observations=dataset_file["obs"][:].astype(np.float32),
@@ -190,10 +190,25 @@ def load_kitchen_dataset(h5path, traj_length):
         rewards=dataset_file["rewards"][:].astype(np.float32),
         dones=dataset_file["dones"][:].astype(np.float32),
     )
-    for k, v in dataset.items():
-        dataset[k] = v[:500000] # all of the mujoco buffers are empty after 500k
-    dataset['terminals'] = np.zeros(500000)
-    dataset['terminals'][traj_length-1::traj_length] = 1
+    # track terminal states to prevent indexing across trajs in n-step returns
+    if dataset['dones'].sum():
+        dones = dataset['dones'].nonzero()[0]
+        dataset['terminals'] = np.zeros_like(dataset['dones'])
+        terminal_tracker = min(dones[0], traj_length-1)
+        for done in dones:
+            while terminal_tracker < done:
+                dataset['terminals'][terminal_tracker] = 1
+                terminal_tracker += traj_length
+            terminal_tracker = done
+        while terminal_tracker <= dataset['terminals'].size:
+            dataset['terminals'][terminal_tracker] = 1
+            terminal_tracker += traj_length
+    else:
+        dataset['terminals'] = np.zeros_like(dataset['dones'])
+        dataset['terminals'][traj_length-1::traj_length] = 1
+    if splice:
+        for k, v in dataset.items():
+            dataset[k] = v[300000:400000]
     return dataset
 
 def load_door_dataset(h5path, traj_length):

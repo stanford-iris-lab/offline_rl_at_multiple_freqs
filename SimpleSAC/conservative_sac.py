@@ -35,6 +35,7 @@ class ConservativeSAC(object):
         config.cql_temp = 1.0
         config.cql_min_q_weight = 5.0
         config.buffer_file = './data0.h5py'
+        config.mse_loss = 0
 
         if updates is not None:
             config.update(ConfigDict(updates).copy_and_resolve_references())
@@ -109,7 +110,7 @@ class ConservativeSAC(object):
             self.qf2(observations, new_actions),
         )
         policy_loss = (alpha*log_pi - q_new_actions).mean()
-        # policy_loss = F.mse_loss(new_actions, actions)
+        policy_loss += self.config.mse_loss * F.mse_loss(new_actions, actions)
 
         """ Q function loss """
         q1_pred = self.qf1(observations, actions)
