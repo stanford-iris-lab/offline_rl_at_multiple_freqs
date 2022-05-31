@@ -11,6 +11,7 @@ class StepSampler(object):
         self._env = env
         self._traj_steps = 0
         self._current_observation = self.env.reset()
+        self.action_scale = action_scale
 
     def sample(self, policy, n_steps, deterministic=False, replay_buffer=None):
         observations = []
@@ -102,10 +103,10 @@ class TrajSampler(object):
                 next_observations.append(next_observation)
                 if video and traj == 0:
                     if 'rgb_array' in self.env.metadata['render.modes']:
-                        if True:
+                        if 'kitchen' in self.env.spec.id:
                             from d4rl.kitchen.adept_envs.franka.kitchen_multitask_v0 import KitchenTaskRelaxV1
                             imgs.append(KitchenTaskRelaxV1.render(self.env, 'rgb_array'))
-                        else:
+                        else: # pendulum
                             imgs.append(self.env.render(mode='rgb_array'))
                     else: # for metaworld
                         imgs.append(self.env.render(offscreen=True))

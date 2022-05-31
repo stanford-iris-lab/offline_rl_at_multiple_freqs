@@ -29,17 +29,17 @@ Xvfb :0 &
 #   --save_model True
 
 # off-policy training in mujoco
-MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.sac_main \
-  --logging.output_dir "./experiments/collect/${1}/" \
+MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.mix_sac_main \
+  --logging.output_dir "./experiments/collect/kitchen-complete-v0/" \
   --load_model_from_path "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/03aacbc989474a0892800bb34a9d0bcf/model_r3.799999952316284_epoch149.pkl" \
   --logging.online True \
-  --env ${1} \
-  --dt ${4} \
+  --env "kitchen-complete-v0" \
+  --dt ${3} \
   --init_buffer True \
-  --max_traj_length ${6} \
-  --sac.policy_lr ${2} \
-  --seed ${3} \
-  --sac.discount ${5} \
+  --max_traj_length ${4} \
+  --sac.policy_lr ${1} \
+  --seed ${2} \
+  --sac.discount .99 \
   --device 'cuda' \
   --save_model True
 
