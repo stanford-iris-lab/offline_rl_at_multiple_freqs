@@ -26,7 +26,6 @@ DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
   --cql.qf_lr 3e-4 \
   --cql.discount .99 \
   --n_epochs 600 \
-  --dt_feat ${1} \
   --seed ${2} \
   --N_steps ${3} \
   --device 'cuda' \

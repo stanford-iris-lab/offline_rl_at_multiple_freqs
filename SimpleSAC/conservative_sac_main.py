@@ -143,16 +143,17 @@ def main(argv):
     elif 'kitchen' in FLAGS.env:
         datasets, eval_samplers = {}, {}
         env = gym.make(FLAGS.env)
-        # datasets[40] = load_d4rl_dataset(env)
-        # datasets[40]['terminals'] = datasets[40]['dones']
+        datasets[40] = load_d4rl_dataset(env)
+        datasets[40]['terminals'] = datasets[40]['dones']
         
-        # datasets[30] = load_kitchen_dataset(
-        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/8e25ba5f337a44d4a27aedc077c4a9bf/buffer.h5py',
-        #     traj_length=666)
-        datasets[35] = load_kitchen_dataset(
+        datasets[30] = load_kitchen_dataset(
             '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/8e25ba5f337a44d4a27aedc077c4a9bf/buffer.h5py',
-            traj_length=571,
-            splice=True)
+            traj_length=666,
+            splice=False)
+        # datasets[35] = load_kitchen_dataset(
+        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/8e25ba5f337a44d4a27aedc077c4a9bf/buffer.h5py',
+        #     traj_length=571,
+        #     splice=True)
         # datasets[45] = load_kitchen_dataset(
         #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/4e988ccf1d1a46b489ccaaeee56ce769/buffer.h5py',
         #     traj_length=444,
@@ -163,19 +164,19 @@ def main(argv):
         # datasets[80] = load_kitchen_dataset(
         #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/2ad22ec184eb4fb5b242ee5315b4cc0b/buffer.h5py')
 
-        # env30 = gym.make(FLAGS.env).unwrapped
-        # env30.frame_skip = 30
-        # assert env30.dt == 30 * .002
-        # eval_samplers[30] = TrajSampler(env30, FLAGS.max_traj_length, action_scale=1.0)
+        env30 = gym.make(FLAGS.env).unwrapped
+        env30.frame_skip = 30
+        assert env30.dt == 30 * .002
+        eval_samplers[30] = TrajSampler(env30, FLAGS.max_traj_length, action_scale=1.0)
 
-        env35 = gym.make(FLAGS.env).unwrapped
-        env35.frame_skip = 35
-        assert env35.dt == 35 * .002
-        eval_samplers[35] = TrajSampler(env35, FLAGS.max_traj_length, action_scale=1.0)
+        # env35 = gym.make(FLAGS.env).unwrapped
+        # env35.frame_skip = 35
+        # assert env35.dt == 35 * .002
+        # eval_samplers[35] = TrajSampler(env35, FLAGS.max_traj_length, action_scale=1.0)
 
-        # env40 = gym.make(FLAGS.env).unwrapped
-        # assert env40.dt == 40 * .002
-        # eval_samplers[40] = TrajSampler(env40, FLAGS.max_traj_length, action_scale=1.0)
+        env40 = gym.make(FLAGS.env).unwrapped
+        assert env40.dt == 40 * .002
+        eval_samplers[40] = TrajSampler(env40, FLAGS.max_traj_length, action_scale=1.0)
         
         # env45 = gym.make(FLAGS.env).unwrapped
         # env45.frame_skip = 45

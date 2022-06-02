@@ -257,6 +257,11 @@ class ConservativeSAC(object):
             average_target_q=target_q_values.mean().item(),
             total_steps=self.total_steps,
         )
+        # add q_target by dt
+        discounts = discount_arr.unique()
+        for discount in discounts:
+            metrics[f'average_qf1_{discount}'] = q1_pred[discount_arr==discount].mean()
+            metrics[f'average_qf2_{discount}'] = q2_pred[discount_arr==discount].mean()
         metrics.update(cql_metrics)
         return metrics
 
