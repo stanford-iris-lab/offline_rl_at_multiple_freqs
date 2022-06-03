@@ -181,7 +181,7 @@ def load_pendulum_dataset(h5path, half_angle=False):
     dataset['terminals'] = dataset['dones']
     return dataset
 
-def load_kitchen_dataset(h5path, traj_length, splice):
+def load_kitchen_dataset(h5path, traj_length, splice, filter_bad):
     dataset_file = h5py.File(h5path, "r")
     dataset = dict(
         observations=dataset_file["obs"][:].astype(np.float32),
@@ -206,6 +206,21 @@ def load_kitchen_dataset(h5path, traj_length, splice):
     else:
         dataset['terminals'] = np.zeros_like(dataset['dones'])
         dataset['terminals'][traj_length-1::traj_length] = 1
+    if filter_bad:
+        # get reward per trajectory
+        cum_rew = dataset['rewards'].cumsum().astype(int)
+        cum_rew_per_traj = cum_rew[dataset['terminals'].astype(bool)]
+        reward_per_traj = cum_rew_per_traj - np.roll(cum_rew_per_traj,shift=1)
+        reward_per_traj[0] = cum_rew_per_traj[0]
+        start = np.insert(dataset['terminals'].nonzero()[0]+1, 0, 0)[:-1]
+        stop = dataset['terminals'].nonzero()[0]+1
+        # filter trajectories by reward
+        keep_idxs = np.zeros_like(dataset['terminals']).astype(bool)
+        for reward, start, stop in zip(reward_per_traj, start, stop):
+            if reward > 1:
+                keep_idxs[start:stop] = 1
+        for k, v in dataset.items():
+            dataset[k] = v[keep_idxs]
     if splice:
         for k, v in dataset.items():
             dataset[k] = v[300000:400000]

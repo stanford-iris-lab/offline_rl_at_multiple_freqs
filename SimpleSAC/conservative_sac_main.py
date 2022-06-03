@@ -149,7 +149,8 @@ def main(argv):
         datasets[30] = load_kitchen_dataset(
             '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/8e25ba5f337a44d4a27aedc077c4a9bf/buffer.h5py',
             traj_length=666,
-            splice=False)
+            splice=False,
+            filter_bad=True)
         # datasets[35] = load_kitchen_dataset(
         #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/8e25ba5f337a44d4a27aedc077c4a9bf/buffer.h5py',
         #     traj_length=571,
