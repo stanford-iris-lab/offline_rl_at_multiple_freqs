@@ -237,11 +237,8 @@ def load_door_dataset(h5path, traj_length):
     )
     # TODO: make consistent
     for k, v in dataset.items():
-        if len(v.shape) > 1:
-            dim_obs = v.shape[1]
-        else:
-            dim_obs = 1
-        v = v[490000:500000] # all of the mujoco buffers are empty after 500k
+        dataset[k] = v[490000:500000] # empty after 500k
+    # add terminal flag
     dataset['terminals'] = np.zeros(500000)
     dataset['terminals'][traj_length-1::traj_length] = 1
     dataset['terminals'] = dataset['terminals'][490000:500000]

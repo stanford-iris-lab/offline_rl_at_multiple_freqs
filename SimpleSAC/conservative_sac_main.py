@@ -30,7 +30,7 @@ FLAGS_DEF = define_flags_with_default(
     device='cpu',
     save_model=False,
     batch_size=256,
-    sparse=True,
+    sparse=False,
 
     reward_scale=1.0,
     reward_bias=0.0,
@@ -53,7 +53,7 @@ FLAGS_DEF = define_flags_with_default(
     pretrained_target_path='',
     shared_q_target=False,
     max_q_target=False,
-    video=False,
+    video=True,
     half_angle=False,
     # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.02/aec001f95d094fa598456707e8c81814/',
 
@@ -138,7 +138,7 @@ def main(argv):
             dataset = load_dataset(buffers[dt])
             if FLAGS.sparse:
                 dataset['rewards'] = (dataset['rewards'] == 10.0 * (dt/10)).astype('float32')
-            dataset['rewards'] = dataset['rewards'] * (dt/.02)
+            # dataset['rewards'] = dataset['rewards'] * (dt/.02)
             datasets[dt] = dataset
     elif 'kitchen' in FLAGS.env:
         datasets, eval_samplers = {}, {}
@@ -151,49 +151,17 @@ def main(argv):
             traj_length=666,
             splice=False,
             filter_bad=True)
-        # datasets[35] = load_kitchen_dataset(
-        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/8e25ba5f337a44d4a27aedc077c4a9bf/buffer.h5py',
-        #     traj_length=571,
-        #     splice=True)
-        # datasets[45] = load_kitchen_dataset(
-        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/4e988ccf1d1a46b489ccaaeee56ce769/buffer.h5py',
-        #     traj_length=444,
-        #     splice=False)
-        # datasets[50] = load_kitchen_dataset(
-        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/eafb3030e80d4003a14b9dc1a47d8573/buffer.h5py',
-        #     traj_length=400)
-        # datasets[80] = load_kitchen_dataset(
-        #     '/iris/u/kayburns/continuous-rl/CQL/experiments/collect/kitchen-complete-v0/2ad22ec184eb4fb5b242ee5315b4cc0b/buffer.h5py')
+
 
         env30 = gym.make(FLAGS.env).unwrapped
         env30.frame_skip = 30
         assert env30.dt == 30 * .002
         eval_samplers[30] = TrajSampler(env30, FLAGS.max_traj_length, action_scale=1.0)
 
-        # env35 = gym.make(FLAGS.env).unwrapped
-        # env35.frame_skip = 35
-        # assert env35.dt == 35 * .002
-        # eval_samplers[35] = TrajSampler(env35, FLAGS.max_traj_length, action_scale=1.0)
-
         env40 = gym.make(FLAGS.env).unwrapped
         assert env40.dt == 40 * .002
         eval_samplers[40] = TrajSampler(env40, FLAGS.max_traj_length, action_scale=1.0)
         
-        # env45 = gym.make(FLAGS.env).unwrapped
-        # env45.frame_skip = 45
-        # assert env45.dt == 45 * .002
-        # eval_samplers[45] = TrajSampler(env45, FLAGS.max_traj_length, action_scale=1.0)
-
-        # env50 = gym.make(FLAGS.env).unwrapped
-        # env50.frame_skip = 50
-        # assert env50.dt == 50 * .002
-        # eval_samplers[50] = TrajSampler(env50, FLAGS.max_traj_length, action_scale=1.0)
-
-        # env80 = gym.make(FLAGS.env).unwrapped
-        # env80.frame_skip = 80
-        # assert env80.dt == 80 * .002
-        # eval_samplers[80] = TrajSampler(env80, FLAGS.max_traj_length, action_scale=2.0)
-
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO
 
@@ -285,6 +253,7 @@ def main(argv):
                 # TODO weird: this is replicating the same indexing per_dataset_batch_size times
                 if FLAGS.shared_q_target:
                     batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
+                # discount_arr = torch.Tensor([FLAGS.cql.discount ** (1) for dt in dts]).cuda()
                 discount_arr = torch.Tensor([FLAGS.cql.discount ** (dt/max(dts)) for dt in dts]).cuda()
                 discount_arr =  discount_arr.repeat_interleave(per_dataset_batch_size)
                 metrics.update(prefix_metrics(sac.train(batch, discount_arr, n_steps), 'sac'))
@@ -301,7 +270,8 @@ def main(argv):
                     norm_dt = (dt - np.mean(dts)) / np.std(dts)
                     trajs = eval_sampler.sample(
                         sampler_policy, FLAGS.eval_n_trajs, FLAGS.dt_feat, norm_dt,
-                        deterministic=True, video=video, output_file=output_file
+                        deterministic=True, video=video, output_file=output_file,
+                        qs=[sac.qf1, sac.qf2]
                     )
 
                     if FLAGS.visualize_traj or epoch % 100 == 99 or epoch == 0:

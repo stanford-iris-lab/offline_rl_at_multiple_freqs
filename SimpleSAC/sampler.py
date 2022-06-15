@@ -98,6 +98,8 @@ class TrajSampler(object):
                 dones.append(done)
                 if 'score' in info:
                     successes.append(info['score'])
+                elif 'success' in info:
+                    successes.append(info['success'])
                 else:
                     successes.append(0)
                 next_observations.append(next_observation)
