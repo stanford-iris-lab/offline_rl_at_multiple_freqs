@@ -48,6 +48,7 @@ FLAGS_DEF = define_flags_with_default(
     load_model='',
     visualize_traj=False,
     N_steps=0.0,
+    all_same_N=False,
     # N_datapoints=250000,
     dt_feat=False,
     pretrained_target_path='',
@@ -246,7 +247,10 @@ def main(argv):
                     batch[k] = np.concatenate([b[k] for b in batch_dts], axis=0)
                 batch = batch_to_torch(batch, FLAGS.device)
                 if FLAGS.N_steps:
-                    n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
+                    if FLAGS.all_same_N:
+                        n_steps = n_steps = torch.Tensor([FLAGS.N_steps/min(dts) for dt in dts])
+                    else:
+                        n_steps = torch.Tensor([FLAGS.N_steps/dt for dt in dts])
                 else:
                     n_steps = torch.Tensor([1 for dt in dts])
                 n_steps = n_steps.repeat_interleave(per_dataset_batch_size)
