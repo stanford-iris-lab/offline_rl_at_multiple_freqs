@@ -80,7 +80,8 @@ def main(argv):
 
     if "pendulum" in FLAGS.env:
         datasets, eval_samplers = {}, {}
-        for dt in [.01, .02, .005]:
+        # for dt in [.01, .02, .005]:
+        for dt in [.005]:
             env = gym.make('Pendulum-v1').unwrapped
             env.dt = dt
             eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), FLAGS.max_traj_length)
