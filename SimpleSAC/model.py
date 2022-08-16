@@ -252,6 +252,20 @@ class FullyConnectedQFunction(nn.Module):
         input_tensor = torch.cat([observations, actions], dim=-1)
         return torch.squeeze(self.network(input_tensor), dim=-1)
 
+class FullyConnectedValueFunction(nn.Module):
+
+    def __init__(self, observation_dim, arch='256-256', orthogonal_init=False):
+        super().__init__()
+        self.observation_dim = observation_dim
+        self.arch = arch
+        self.orthogonal_init = orthogonal_init
+        self.network = FullyConnectedNetwork(
+            observation_dim, 1, arch, orthogonal_init
+        )
+
+    def forward(self, observations):
+        input_tensor = observations
+        return torch.squeeze(self.network(input_tensor), dim=-1)
 
 class Scalar(nn.Module):
     def __init__(self, init_value):

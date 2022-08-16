@@ -13,9 +13,9 @@ import d4rl
 import absl.app
 import absl.flags
 
-from .conservative_sac import ConservativeSAC
+from .conservative_dau import ConservativeDAU
 from .replay_buffer import *
-from .model import TanhGaussianPolicy, FullyConnectedQFunction, SamplerPolicy
+from .model import TanhGaussianPolicy, FullyConnectedQFunction, FullyConnectedValueFunction, SamplerPolicy
 from .sampler import TrajSampler
 from .utils import *
 from viskit.logging import logger, setup_logger
@@ -58,7 +58,7 @@ FLAGS_DEF = define_flags_with_default(
     half_angle=False,
     # pretrained_target_path='/iris/u/kayburns/continuous-rl/CQL/experiments/.02/aec001f95d094fa598456707e8c81814/',
 
-    cql=ConservativeSAC.get_default_config(),
+    cql=ConservativeDAU.get_default_config(),
     logging=WandBLogger.get_default_config(),
 )
 
@@ -189,27 +189,23 @@ def main(argv):
             orthogonal_init=FLAGS.orthogonal_init,
         )
 
-        qf1 = FullyConnectedQFunction(
+        vf = FullyConnectedValueFunction(
+            obs_shape,
+            arch=FLAGS.qf_arch,
+            orthogonal_init=FLAGS.orthogonal_init,
+        )
+
+        af = FullyConnectedQFunction(
             obs_shape,
             action_shape[0],
             arch=FLAGS.qf_arch,
             orthogonal_init=FLAGS.orthogonal_init,
         )
 
-        qf2 = FullyConnectedQFunction(
-            obs_shape,
-            action_shape[0],
-            arch=FLAGS.qf_arch,
-            orthogonal_init=FLAGS.orthogonal_init,
-        )
+        target_af = deepcopy(af)
+        target_vf = deepcopy(vf)
 
-        target_qf1 = deepcopy(qf1)
-        target_qf2 = deepcopy(qf2)
-
-        if FLAGS.cql.target_entropy >= 0.0:
-            FLAGS.cql.target_entropy = -np.prod(action_shape).item()
-
-        sac = ConservativeSAC(FLAGS.cql, policy, qf1, qf2, target_qf1, target_qf2)
+        sac = ConservativeDAU(FLAGS.cql, policy, af, vf, target_af, target_vf)
     sac.torch_to_device(FLAGS.device)
 
     sampler_policy = SamplerPolicy(policy, FLAGS.device)
@@ -260,9 +256,11 @@ def main(argv):
                 if FLAGS.shared_q_target:
                     batch['next_observations'][:,(n_steps-1).long(),-1] = (max(dts) - np.mean(dts)) / np.std(dts)
                 # discount_arr = torch.Tensor([FLAGS.cql.discount ** (1) for dt in dts]).cuda()
+                dt_arr = torch.Tensor([dt for dt in dts]).cuda()
                 discount_arr = torch.Tensor([FLAGS.cql.discount ** (dt/max(dts)) for dt in dts]).cuda()
+                dt_arr = dt_arr.repeat_interleave(per_dataset_batch_size)
                 discount_arr =  discount_arr.repeat_interleave(per_dataset_batch_size)
-                metrics.update(prefix_metrics(sac.train(batch, discount_arr, n_steps), 'sac'))
+                metrics.update(prefix_metrics(sac.train(batch, discount_arr, n_steps, dt_arr), 'sac'))
 
         with Timer() as eval_timer:
             for dt, eval_sampler in eval_samplers.items():
@@ -277,7 +275,7 @@ def main(argv):
                     trajs = eval_sampler.sample(
                         sampler_policy, FLAGS.eval_n_trajs, FLAGS.dt_feat, norm_dt,
                         deterministic=True, video=video, output_file=output_file,
-                        qs=[sac.qf1, sac.qf2]
+                        qs=[sac.af, sac.af]
                     )
 
                     if FLAGS.visualize_traj or epoch % 100 == 99 or epoch == 0:
@@ -292,7 +290,7 @@ def main(argv):
                         elif "pendulum" in FLAGS.env:
                             norm_dt = (dt - np.mean(dts)) / np.std(dts)
                             generate_pendulum_visualization(
-                                sac.policy, sac.qf1, sac.qf2, wandb_logger,
+                                sac.policy, sac.af, sac.af, wandb_logger,
                                 f'val_dt{dt}_epoch{epoch}.png', FLAGS.dt_feat, norm_dt)
 
                     if "goal-observable" in FLAGS.env:
