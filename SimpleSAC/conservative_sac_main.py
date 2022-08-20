@@ -50,7 +50,7 @@ FLAGS_DEF = define_flags_with_default(
     N_steps=0.0,
     all_same_N=False,
     # N_datapoints=250000,
-    dt_feat=False,
+    dt_feat=True,
     pretrained_target_path='',
     shared_q_target=False,
     max_q_target=False,
@@ -81,11 +81,9 @@ def main(argv):
     if "pendulum" in FLAGS.env:
         datasets, eval_samplers = {}, {}
         for dt in [.01, .02, .005]:
-        # for dt in [.005]:
             env = gym.make('Pendulum-v1').unwrapped
             env.dt = dt
             eval_samplers[dt] = TrajSampler(WrapContinuousPendulumSparse(env), FLAGS.max_traj_length)
-            # eval_samplers[dt] = TrajSampler(env, FLAGS.max_traj_length)
             if FLAGS.half_angle:
                 if dt == .005 or dt == .01:
                     half_angle = True
@@ -122,11 +120,12 @@ def main(argv):
     elif "drawer-open-v2-goal-observable" in FLAGS.env:
         # find correct buffer file
         buffers = {
-            1: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/a3240368c8534dc4bbae373acd166008/buffer.h5py",
-            2: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/fcbc6ee5141749a7a3bd3224e68c5f06/buffer.h5py",
-            5: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/85ffe681bb424d219305ebfed7d30581/buffer.h5py",
-            10: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect/drawer-open-v2-goal-observable/180be33816c24878a114d3c9816d65d5/buffer.h5py"
+            1: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect_old/drawer-open-v2-goal-observable/a3240368c8534dc4bbae373acd166008/buffer.h5py",
+            2: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect_old/drawer-open-v2-goal-observable/fcbc6ee5141749a7a3bd3224e68c5f06/buffer.h5py",
+            5: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect_old/drawer-open-v2-goal-observable/85ffe681bb424d219305ebfed7d30581/buffer.h5py",
+            10: "/iris/u/kayburns/continuous-rl/CQL/experiments/collect_old/drawer-open-v2-goal-observable/180be33816c24878a114d3c9816d65d5/buffer.h5py"
         }
+        traj_lengths = {1: 2500, 2: 1250, 5: 500, 10: 500}
         datasets, eval_samplers = {}, {}
 
         dts = list(buffers.keys())
@@ -138,10 +137,7 @@ def main(argv):
             eval_samplers[dt] = TrajSampler(env, FLAGS.max_traj_length)
 
             # fetch dataset
-            dataset = load_dataset(buffers[dt])
-            if FLAGS.sparse:
-                dataset['rewards'] = (dataset['rewards'] == 10.0 * (dt/10)).astype('float32')
-            # dataset['rewards'] = dataset['rewards'] * (dt/.02)
+            dataset = load_door_dataset(buffers[dt], traj_length=traj_lengths[dt])
             datasets[dt] = dataset
     elif 'kitchen' in FLAGS.env:
         datasets, eval_samplers = {}, {}
@@ -164,6 +160,21 @@ def main(argv):
         env40 = gym.make(FLAGS.env).unwrapped
         assert env40.dt == 40 * .002
         eval_samplers[40] = TrajSampler(env40, FLAGS.max_traj_length, action_scale=1.0)
+
+        # env25 = gym.make(FLAGS.env).unwrapped
+        # env25.frame_skip = 25
+        # assert env25.dt == 25 * .002
+        # eval_samplers[25] = TrajSampler(env25, FLAGS.max_traj_length, action_scale=1.0)
+
+        # env35 = gym.make(FLAGS.env).unwrapped
+        # env35.frame_skip = 35
+        # assert env35.dt == 35 * .002
+        # eval_samplers[35] = TrajSampler(env35, FLAGS.max_traj_length, action_scale=1.0)
+
+        # env45 = gym.make(FLAGS.env).unwrapped
+        # env45.frame_skip = 45
+        # assert env45.dt == 45 * .002
+        # eval_samplers[45] = TrajSampler(env45, FLAGS.max_traj_length, action_scale=1.0)
         
     else:
         eval_sampler = TrajSampler(gym.make(FLAGS.env).unwrapped, FLAGS.max_traj_length) # TODO

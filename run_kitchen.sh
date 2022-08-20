@@ -16,7 +16,7 @@ cd /iris/u/kayburns/continuous-rl/CQL
 export PYTHONPATH="$PYTHONPATH:$(pwd)"
 export MJLIB_PATH=/sailhome/kayburns/anaconda3/envs/py3.7_torch1.8/lib/python3.7/site-packages/mujoco_py/binaries/linux/mujoco210/bin/libmujoco210.so
 Xvfb :0 &
-MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.conservative_dau_main \
+MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
   --logging.output_dir "./rebuttal/mujoco/kitchen-complete-v0/" \
   --logging.online True \
   --logging.project 'rebuttal' \

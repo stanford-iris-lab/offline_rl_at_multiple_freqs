@@ -18,15 +18,15 @@ export MJLIB_PATH=/sailhome/kayburns/anaconda3/envs/py3.7_torch1.8/lib/python3.7
 Xvfb :0 &
 DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
   --env "pendulum" \
-  --logging.output_dir "./ldod/pendulum/" \
+  --logging.output_dir "./rebuttal/pendulum/" \
   --logging.online True \
-  --logging.project 'ldod' \
+  --logging.project 'rebuttal' \
   --cql.cql_min_q_weight 5 \
   --cql.policy_lr 3e-4 \
   --cql.qf_lr 3e-4 \
-  --cql.discount ${1} \
+  --cql.discount .99 \
   --n_epochs 500 \
-  --seed ${2} \
-  --N_steps ${3} \
+  --seed ${1} \
+  --N_steps ${2} \
   --device 'cuda' \
   --save_model True

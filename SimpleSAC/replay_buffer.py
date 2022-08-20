@@ -179,13 +179,13 @@ def load_pendulum_dataset(h5path, half_angle=False):
             v = v[mask]
         dataset[k] = v
     dataset['terminals'] = dataset['dones']
-    # makes non-sparse
+    # # makes non-sparse
     # def angle_normalize(x):
     #     return ((x + np.pi) % (2 * np.pi)) - np.pi
     # max_torque = 2.0
     # th, thdot = np.arcsin(dataset['observations'][:,0]), dataset['observations'][:,2]
     # u = dataset['actions'].squeeze()
-    # u = np.clip(u, -max_torque, max_torque)
+    # u = np.clip(u, -max_torque, max_torque)[0]
     # dataset['rewards'] = - (angle_normalize(th) ** 2 + 0.1 * thdot**2 + 0.001 * (u**2))
     return dataset
 

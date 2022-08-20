@@ -27,7 +27,7 @@ class ConservativeDAU(object):
         config.optimizer_type = 'adam'
         config.soft_target_update_rate = 5e-3
         config.target_update_period = 1
-        config.use_cql = False
+        config.use_cql = True
         config.cql_n_actions = 10
         config.cql_importance_sample = True
         config.cql_lagrange = False
@@ -176,7 +176,9 @@ class ConservativeDAU(object):
             policy_loss=policy_loss.item(),
             critic_loss=critic_loss.item(),
             q_mean=q.mean().item(),
-            average_af=pre_adv.mean().item(),
+            average_pre_adv=pre_adv.mean().item(),
+            average_max_adv=pre_max_adv.mean().item(),
+            average_adv=adv.mean().item(),
             total_steps=self.total_steps,
         )
         metrics.update(cql_metrics)
