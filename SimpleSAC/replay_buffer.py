@@ -245,7 +245,15 @@ def load_door_dataset(h5path, traj_length):
     )
     # TODO: make consistent
     for k, v in dataset.items():
-        dataset[k] = v[490000:500000] # empty after 500k
+        if len(v.shape) > 1:
+            dim_obs = v.shape[1]
+        else:
+            dim_obs = 1
+        v = v[490000:500000] # empty after 500k
+        v = v.reshape((traj_length, -1, dim_obs)) # 500, 20, d
+        v = v.transpose(1, 0, 2) # batch id should be leading axis
+        dataset[k] = v.reshape((10000, -1)).squeeze() # flatten again
+
     # add terminal flag
     dataset['terminals'] = np.zeros(500000)
     dataset['terminals'][traj_length-1::traj_length] = 1

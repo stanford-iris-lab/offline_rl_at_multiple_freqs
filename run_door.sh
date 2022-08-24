@@ -26,6 +26,7 @@ MUJOCO_GL=egl DISPLAY=:0 python -m SimpleSAC.conservative_sac_main \
   --cql.policy_lr 3e-5 \
   --seed ${1} \
   --N_steps ${2} \
+  --sparse False \
   --device 'cuda' \
   --save_model True \
   --cql.cql_min_q_weight 5 \

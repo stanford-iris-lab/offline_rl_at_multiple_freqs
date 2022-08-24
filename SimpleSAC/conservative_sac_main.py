@@ -50,7 +50,7 @@ FLAGS_DEF = define_flags_with_default(
     N_steps=0.0,
     all_same_N=False,
     # N_datapoints=250000,
-    dt_feat=True,
+    dt_feat=False,
     pretrained_target_path='',
     shared_q_target=False,
     max_q_target=False,
@@ -117,6 +117,14 @@ def main(argv):
             if FLAGS.sparse:
                 dataset['rewards'] = (dataset['rewards'] == 10.0 * (dt/10)).astype('float32')
             datasets[dt] = dataset
+        
+        # for dt in range(1,11):
+        #     # load environment
+        #     env = ALL_V2_ENVIRONMENTS_GOAL_OBSERVABLE[FLAGS.env](seed=FLAGS.seed)
+        #     env.frame_skip = dt
+        #     assert env.dt == dt * .00125
+        #     eval_samplers[dt] = TrajSampler(env, FLAGS.max_traj_length)
+
     elif "drawer-open-v2-goal-observable" in FLAGS.env:
         # find correct buffer file
         buffers = {
